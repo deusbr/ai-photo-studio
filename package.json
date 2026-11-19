@@ -1,0 +1,44 @@
+{
+  "name": "ai-photo-studio",
+  "version": "1.0.0",
+  "description": "Zero-dependency full-crew AI photo editing studio (MCP server + portable SKILL.md + Local Web Studio) for Codex, Gemini CLI, and Claude Code/Desktop — using your existing plan subscription.",
+  "main": "index.cjs",
+  "bin": {
+    "ai-photo-studio": "./bin/ai-photo-studio.cjs",
+    "ai-photo-studio-mcp": "./bin/mcp-server.cjs"
+  },
+  "scripts": {
+    "check": "node --check index.cjs && node --check bin/ai-photo-studio.cjs && node --check bin/mcp-server.cjs && node --check lib/image-meta.cjs && node --check lib/crew.cjs && node --check lib/store.cjs && node --check lib/studio-web.cjs && node --check lib/installers.cjs && node --check tests/studio.test.cjs",
+    "test": "node --test tests/studio.test.cjs"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "codex",
+    "gemini-cli",
+    "claude-code",
+    "claude-desktop",
+    "photo-editing",
+    "ai-studio",
+    "agent-skills",
+    "nodejs"
+  ],
+  "author": "Emerson Almeida <https://github.com/deusbr>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/deusbr/ai-photo-studio.git"
+  },
+  "homepage": "https://github.com/deusbr/ai-photo-studio#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "index.cjs",
+    "bin/",
+    "lib/",
+    "skill/",
+    "README.md",
+    "LICENSE"
+  ]
+}
