@@ -181,7 +181,7 @@ async function handleMessage(msg) {
   if (msg.method === 'initialize') {
     return respond(msg.id, {
       protocolVersion: '2024-11-05',
-      serverInfo: { name: 'ai-photo-studio', version: '1.0.0' },
+      serverInfo: { name: 'ai-photo-studio', version: require('../package.json').version },
       capabilities: { tools: {} }
     });
   }

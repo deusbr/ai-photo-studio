@@ -225,3 +225,31 @@ test('stdio MCP server serves initialize, tools/list, and full studio job workfl
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('product-commercial preset omits portrait skin/eye terms and Web UI uses dynamic aspect-ratio', async () => {
+  const dir = makeTempDir();
+  try {
+    const imgPath = path.join(dir, 'product.png');
+    fs.writeFileSync(imgPath, makeFakePng(1600, 1200));
+
+    const store = new StudioStore(path.join(dir, 'studio-home'));
+    const job = store.createJobFromFile({ imagePath: imgPath, preset: 'product-commercial', brief: 'Studio monitor' });
+
+    assert.doesNotMatch(job.promptPacks.codexPrompt, /skin pores|dead eyes|catchlights/i);
+    assert.doesNotMatch(job.promptPacks.geminiPrompt, /skin pores|dead eyes|catchlights/i);
+    assert.match(job.promptPacks.codexPrompt, /brand logos/i);
+    assert.match(job.promptPacks.codexPrompt, /typography/i);
+
+    const web = createStudioWebServer({ store, port: 0 });
+    const info = await web.listen();
+    try {
+      const html = await (await fetch(info.url)).text();
+      assert.match(html, /job\.sourceImage\.width/);
+      assert.match(html, /max-height:\s*75vh/);
+    } finally {
+      await web.close();
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
