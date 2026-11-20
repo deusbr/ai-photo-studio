@@ -1,6 +1,6 @@
 {
   "name": "ai-photo-studio",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Zero-dependency 8-agent Autonomous & Directed AI Photo Studio (MCP server + portable SKILL.md + Local Web Workbench) for OpenBot, Codex, Gemini CLI, and Claude Code/Desktop.",
   "main": "index.cjs",
   "bin": {

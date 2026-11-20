@@ -366,7 +366,7 @@ test('stdio MCP server serves v2.0.0 initialize, 13 tools, studio_run_autonomous
 
     child.kill();
     assert.equal(responses[0].result.serverInfo.name, 'ai-photo-studio');
-    assert.equal(responses[0].result.serverInfo.version, '2.1.0');
+    assert.equal(responses[0].result.serverInfo.version, '2.2.0');
     assert.equal(responses[1].result.tools.length, 13);
     const crewRes = JSON.parse(responses[2].result.content[0].text);
     assert.equal(crewRes.crew.length, 8);
