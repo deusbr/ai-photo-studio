@@ -55,7 +55,13 @@ test('inspectImageFile and classifyImageGeometry extract dimensions, aspect rati
 
     const geo = classifyImageGeometry(meta);
     assert.equal(geo.framingHint, 'classic-portrait-4x5');
+    assert.equal(geo.isTallMobileScreenshot, false);
     assert.equal(geo.lowResWarning, false);
+
+    const shotGeo = classifyImageGeometry({ width: 1080, height: 2209 });
+    assert.equal(shotGeo.isTallMobileScreenshot, true);
+    assert.equal(shotGeo.framingHint, 'tall-mobile-screenshot-strip-ui');
+    assert.equal(shotGeo.recommendedTargetRatio, '4:5');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -136,20 +142,26 @@ test('Directed mode parses bilingual exact orders, enforces subtle-retouch locks
     const r1 = store.registerRenderFromFile(job.id, render1, { engine: 'codex', notes: 'Initial pass' });
     assert.equal(r1.renders[0].parentRenderVersion, 0);
 
-    // Anti-AI QA rejects identity drift < 8 and missing catchlights, routing fixes + delta prompt
+    // Anti-AI QA rejects identity/anti-slop/garment drift < 8 and routes fixes + delta prompt
     const revised = store.submitQa(job.id, {
       verdict: 'pass',
       identityFidelityScore: 7.0,
+      antiSlopScore: 6.5,
+      garmentFidelityScore: 7.2,
       realismScore: 6.5,
       textureAndCatchlightsOk: false,
-      revisionNotes: 'Jawline drifted and eyes lack catchlights.'
+      revisionNotes: 'Jawline drifted, AI stock smile added, and shirt chest logo missing.'
     });
     assert.equal(revised.status, 'revision-requested');
     assert.equal(revised.revisionCycle, 1);
+    assert.ok(revised.crewPasses['anti-ai-auditor'].rejectionTriggers.includes('ai-slop-beautification-or-artificial-smile'));
+    assert.ok(revised.crewPasses['anti-ai-auditor'].rejectionTriggers.includes('garment-logo-or-pattern-loss'));
     assert.ok(revised.crewPasses['anti-ai-auditor'].routeToRoles.includes('consistency-guardian'));
+    assert.ok(revised.crewPasses['anti-ai-auditor'].routeToRoles.includes('art-stylist'));
     assert.ok(revised.crewPasses['anti-ai-auditor'].routeToRoles.includes('lighting-director'));
+    assert.match(revised.promptPacks.codexPrompt, /STRICT PRESERVATION RULE \(DO NOT VIOLATE\)/);
     assert.match(revised.promptPacks.revisionDeltaPrompt, /TARGETED REVISION PASS/);
-    assert.match(revised.promptPacks.revisionDeltaPrompt, /Jawline drifted/);
+    assert.match(revised.promptPacks.revisionDeltaPrompt, /shirt chest logo missing/);
 
     const r2 = store.registerRenderFromFile(job.id, render2, { engine: 'codex', notes: 'Revision v2' });
     assert.equal(r2.renders[1].parentRenderVersion, 1);
@@ -354,7 +366,7 @@ test('stdio MCP server serves v2.0.0 initialize, 13 tools, studio_run_autonomous
 
     child.kill();
     assert.equal(responses[0].result.serverInfo.name, 'ai-photo-studio');
-    assert.equal(responses[0].result.serverInfo.version, '2.0.0');
+    assert.equal(responses[0].result.serverInfo.version, '2.1.0');
     assert.equal(responses[1].result.tools.length, 13);
     const crewRes = JSON.parse(responses[2].result.content[0].text);
     assert.equal(crewRes.crew.length, 8);

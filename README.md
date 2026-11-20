@@ -26,12 +26,12 @@ Built to run **Subscription-First** (zero API keys required) on your existing AI
 | :--- | :--- | :--- | :--- |
 | 1 | **Diretor de Ensaio** | `showrunner-director` | Mode routing (`autonomous` / `directed`), scope classification, and production mandate. |
 | 2 | **Analista Forense** | `forensic-analyst` | 5-axis technical photo audit + **Visual Anti-Inertia** rules. |
-| 3 | **Guardião de Consistência** | `consistency-guardian` | Biometric/product anchoring, multi-subject count protection, and **Zero-Invention Policy**. |
+| 3 | **Guardião de Consistência** | `consistency-guardian` | Biometric/product anchoring, `expressionTruth`, `garmentMicroDetails` (logos/patches/stripes), `antiBeautificationLocks`, and **Zero-Invention Policy**. |
 | 4 | **Diretor de Arte & Styling** | `art-stylist` | Concept, wardrobe/props, set/backdrop, posture geometry, and palette bounded by locks. |
 | 5 | **Especialista em Iluminação** | `lighting-director` | 3D volumetry, key/fill/rim architecture, Kelvin temperature, and iris/specular catchlights. |
 | 6 | **Câmera & Lentes** | `camera-optics` | Camera body, film/sensor emulsion, prime lens, angle, and color science. |
 | 7 | **Editor Master** | `prompt-editor` | Compiles `codexPrompt`, `geminiPrompt`, `claudeComfyPrompt`, `universalJsonSpec`, and `revisionDeltaPrompt`. |
-| 8 | **Auditor Anti-IA & Realismo** | `anti-ai-auditor` | 6-point QA gatekeeper (`pass` / `revise`) with targeted **Correction Routing** and Asset Lineage (`v1 -> v2 -> v3`). |
+| 8 | **Auditor Anti-IA & Realismo** | `anti-ai-auditor` | 8-axis Anti-Slop & Garment QA gatekeeper (`pass` / `revise`) with targeted **Correction Routing** and Asset Lineage (`v1 -> v2 -> v3`). |
 
 ---
 

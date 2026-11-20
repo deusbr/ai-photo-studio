@@ -185,6 +185,8 @@ const TOOLS = [
         jobId: { type: 'string' },
         verdict: { type: 'string', enum: ['pass', 'revise'] },
         identityFidelityScore: { type: 'number' },
+        antiSlopScore: { type: 'number' },
+        garmentFidelityScore: { type: 'number' },
         realismScore: { type: 'number' },
         lightingCoherenceScore: { type: 'number' },
         anatomyScore: { type: 'number' },
@@ -319,6 +321,8 @@ async function handleToolCall(name, args = {}) {
         job: store.submitQa(args.jobId, {
           verdict: args.verdict,
           identityFidelityScore: args.identityFidelityScore,
+          antiSlopScore: args.antiSlopScore,
+          garmentFidelityScore: args.garmentFidelityScore,
           realismScore: args.realismScore,
           lightingCoherenceScore: args.lightingCoherenceScore,
           anatomyScore: args.anatomyScore,
