@@ -9,7 +9,12 @@ const { spawn } = require('node:child_process');
 
 const {
   inspectImageFile,
+  classifyImageGeometry,
   getCrewList,
+  normalizeRoleId,
+  parseDirectedIntent,
+  detectAvailableExecutors,
+  executeRenderWithProvider,
   StudioStore,
   createStudioWebServer,
   getClientTargets,
@@ -33,7 +38,7 @@ function makeFakePng(width = 800, height = 1000) {
   return buf;
 }
 
-test('inspectImageFile extracts PNG dimensions, aspect ratio, and SHA-256 safely', () => {
+test('inspectImageFile and classifyImageGeometry extract dimensions, aspect ratio, and framing hints safely', () => {
   const dir = makeTempDir();
   try {
     const imgPath = path.join(dir, 'sample.png');
@@ -45,48 +50,119 @@ test('inspectImageFile extracts PNG dimensions, aspect ratio, and SHA-256 safely
     assert.equal(meta.height, 1000);
     assert.equal(meta.orientation, 'portrait');
     assert.equal(meta.aspectRatio, '4:5');
+    assert.equal(meta.megapixels, 0.8);
     assert.equal(meta.sha256.length, 64);
+
+    const geo = classifyImageGeometry(meta);
+    assert.equal(geo.framingHint, 'classic-portrait-4x5');
+    assert.equal(geo.lowResWarning, false);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test('StudioStore orchestrates full 7-role crew lifecycle and compiles engine prompts', () => {
+test('Autonomous mode triages photo-only input, generates 3 proposals, switches proposals, and logs 8-agent board', () => {
+  const dir = makeTempDir();
+  try {
+    const imgPath = path.join(dir, 'couple_beach.png');
+    fs.writeFileSync(imgPath, makeFakePng(1500, 1000));
+
+    const store = new StudioStore(path.join(dir, 'studio-home'));
+    assert.equal(getCrewList().length, 8);
+    assert.equal(normalizeRoleId('executive-producer'), 'showrunner-director');
+    assert.equal(normalizeRoleId('dop-optics'), 'camera-optics');
+
+    const created = store.createJobFromFile({ imagePath: imgPath });
+    const autoJob = store.runAutonomous(created.id, { subjectHint: 'couple' });
+    assert.equal(autoJob.mode, 'autonomous');
+    assert.equal(autoJob.subjectType, 'couple');
+    assert.equal(autoJob.proposals.length, 3);
+    assert.equal(autoJob.selectedProposalId, 'prop-couple-editorial');
+    assert.equal(autoJob.agentBoard.length, 7);
+    assert.equal(autoJob.status, 'ready-to-render');
+    assert.ok(autoJob.promptPacks.claudeComfyPrompt.includes('couple-editorial'));
+
+    const switched = store.selectProposal(autoJob.id, 'prop-couple-retouch');
+    assert.equal(switched.selectedProposalId, 'prop-couple-retouch');
+    assert.equal(switched.interventionScope, 'subtle-retouch');
+    assert.equal(switched.locks.keepPose, true);
+    assert.equal(switched.locks.keepWardrobe, true);
+    assert.equal(switched.locks.keepBackground, true);
+    assert.match(switched.promptPacks.codexPrompt, /STRICTLY preserve original wardrobe/i);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('Directed mode parses bilingual exact orders, enforces subtle-retouch locks, and runs Anti-AI critique loop', () => {
   const dir = makeTempDir();
   try {
     const imgPath = path.join(dir, 'anchor.png');
-    const renderPath = path.join(dir, 'render.png');
+    const render1 = path.join(dir, 'render1.png');
+    const render2 = path.join(dir, 'render2.png');
     fs.writeFileSync(imgPath, makeFakePng(1080, 1350));
-    fs.writeFileSync(renderPath, makeFakePng(1080, 1350));
+    fs.writeFileSync(render1, makeFakePng(1080, 1350));
+    fs.writeFileSync(render2, makeFakePng(1080, 1350));
+
+    const intent = parseDirectedIntent('Mantenha a pose e mesma roupa, ajuste sutil apenas na iluminação e nitidez');
+    assert.equal(intent.interventionScope, 'subtle-retouch');
+    assert.equal(intent.locks.keepPose, true);
+    assert.equal(intent.locks.keepWardrobe, true);
+    assert.equal(intent.locks.keepBackground, true);
+
+    const partialIntent = parseDirectedIntent('Mantenha minha pose e roupa, melhore a luz');
+    assert.equal(partialIntent.interventionScope, 'targeted-edit');
+    assert.equal(partialIntent.locks.keepPose, true);
+    assert.equal(partialIntent.locks.keepWardrobe, true);
+    assert.equal(partialIntent.locks.keepBackground, false);
 
     const store = new StudioStore(path.join(dir, 'studio-home'));
-    assert.equal(getCrewList().length, 7);
-
-    const job = store.createJobFromFile({ imagePath: imgPath, preset: 'editorial-portrait', brief: 'Clean magazine portrait' });
-    assert.equal(job.status, 'intake');
-    assert.ok(job.promptPacks.codexPrompt.includes('anchor.png'));
-    assert.ok(job.promptPacks.geminiPrompt.includes('Editorial Magazine Portrait'));
-
-    store.saveCrewPass(job.id, 'forensic-analyst', {
-      correctionsSummary: 'Fix wide-angle nose distortion and flat overhead lighting'
+    const job = store.createJobFromFile({
+      imagePath: imgPath,
+      mode: 'directed',
+      brief: 'Editorial portrait in warm dusk gallery, keep pose only',
+      scope: 'targeted-edit',
+      locks: { keepPose: true },
+      autoRun: true
     });
-    store.saveCrewPass(job.id, 'creative-director', {
-      concept: 'Architectural dusk portrait',
-      wardrobeOrProps: 'Unstructured charcoal linen blazer'
-    });
-    const compiled = store.compilePrompts(job.id);
-    assert.equal(compiled.status, 'ready-to-render');
-    assert.ok(compiled.promptPacks.codexPrompt.includes('Architectural dusk portrait'));
+    assert.equal(job.mode, 'directed');
+    assert.equal(job.interventionScope, 'targeted-edit');
+    assert.equal(job.locks.keepPose, true);
+    assert.match(job.promptPacks.codexPrompt, /STRICTLY preserve the exact original pose/i);
 
-    const withRender = store.registerRenderFromFile(job.id, renderPath, { engine: 'codex', notes: 'Pass 1' });
-    assert.equal(withRender.renders.length, 1);
-    assert.equal(withRender.status, 'awaiting-qa');
+    // Legacy v1 role alias still works
+    store.saveCrewPass(job.id, 'creative-director', { concept: 'Warm dusk gallery portrait' });
+
+    const r1 = store.registerRenderFromFile(job.id, render1, { engine: 'codex', notes: 'Initial pass' });
+    assert.equal(r1.renders[0].parentRenderVersion, 0);
+
+    // Anti-AI QA rejects identity drift < 8 and missing catchlights, routing fixes + delta prompt
+    const revised = store.submitQa(job.id, {
+      verdict: 'pass',
+      identityFidelityScore: 7.0,
+      realismScore: 6.5,
+      textureAndCatchlightsOk: false,
+      revisionNotes: 'Jawline drifted and eyes lack catchlights.'
+    });
+    assert.equal(revised.status, 'revision-requested');
+    assert.equal(revised.revisionCycle, 1);
+    assert.ok(revised.crewPasses['anti-ai-auditor'].routeToRoles.includes('consistency-guardian'));
+    assert.ok(revised.crewPasses['anti-ai-auditor'].routeToRoles.includes('lighting-director'));
+    assert.match(revised.promptPacks.revisionDeltaPrompt, /TARGETED REVISION PASS/);
+    assert.match(revised.promptPacks.revisionDeltaPrompt, /Jawline drifted/);
+
+    const r2 = store.registerRenderFromFile(job.id, render2, { engine: 'codex', notes: 'Revision v2' });
+    assert.equal(r2.renders[1].parentRenderVersion, 1);
 
     const approved = store.submitQa(job.id, {
       verdict: 'pass',
-      identityFidelityScore: 9.5,
+      identityFidelityScore: 9.4,
+      realismScore: 9.2,
+      lightingCoherenceScore: 9.1,
+      anatomyScore: 9.5,
+      framingScore: 9.0,
       textureAndCatchlightsOk: true,
-      revisionNotes: 'Approved for release'
+      revisionNotes: 'Identity locked, catchlights natural.'
     });
     assert.equal(approved.status, 'approved');
   } finally {
@@ -94,7 +170,7 @@ test('StudioStore orchestrates full 7-role crew lifecycle and compiles engine pr
   }
 });
 
-test('Local Studio Web Server creates jobs via upload, attaches renders, and serves Before/After assets', async () => {
+test('Local Studio Web Server creates autonomous/directed jobs, switches proposals, submits QA, and serves assets', async () => {
   const dir = makeTempDir();
   const store = new StudioStore(path.join(dir, 'studio-home'));
   const web = createStudioWebServer({ store, port: 0 });
@@ -105,16 +181,27 @@ test('Local Studio Web Server creates jobs via upload, attaches renders, and ser
     assert.equal(htmlRes.status, 200);
     const html = await htmlRes.text();
     assert.match(html, /AI PHOTO STUDIO/);
+    assert.match(html, /6-Point Anti-AI Realism QA Gate/);
 
     const pngB64 = makeFakePng(600, 600).toString('base64');
     const createRes = await fetch(`${info.url}/api/jobs`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ fileName: 'input.png', base64: `data:image/png;base64,${pngB64}`, preset: 'executive-linkedin' })
+      body: JSON.stringify({ fileName: 'input.png', base64: `data:image/png;base64,${pngB64}`, mode: 'autonomous', autoRun: true })
     });
     assert.equal(createRes.status, 201);
     const created = await createRes.json();
-    assert.equal(created.job.sourceImage.width, 600);
+    assert.equal(created.job.mode, 'autonomous');
+    assert.equal(created.job.proposals.length, 3);
+
+    const propRes = await fetch(`${info.url}/api/jobs/${created.job.id}/proposal`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ proposalId: created.job.proposals[1].id })
+    });
+    assert.equal(propRes.status, 200);
+    const switched = await propRes.json();
+    assert.equal(switched.job.selectedProposalId, created.job.proposals[1].id);
 
     const renderRes = await fetch(`${info.url}/api/jobs/${created.job.id}/renders`, {
       method: 'POST',
@@ -125,11 +212,62 @@ test('Local Studio Web Server creates jobs via upload, attaches renders, and ser
     const rendered = await renderRes.json();
     assert.equal(rendered.job.renders.length, 1);
 
+    const qaRes = await fetch(`${info.url}/api/jobs/${created.job.id}/qa`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ verdict: 'pass', identityFidelityScore: 9.1, textureAndCatchlightsOk: true })
+    });
+    assert.equal(qaRes.status, 200);
+    const qaDone = await qaRes.json();
+    assert.equal(qaDone.job.status, 'approved');
+
     const assetRes = await fetch(`${info.url}/api/jobs/${created.job.id}/assets/${rendered.job.renders[0].assetName}`);
     assert.equal(assetRes.status, 200);
     assert.equal(assetRes.headers.get('content-type'), 'image/png');
   } finally {
     await web.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('Optional BYOK executor detects env providers and executes Gemini payload cleanly with mocked fetch', async () => {
+  const dir = makeTempDir();
+  try {
+    const executors = detectAvailableExecutors({ GEMINI_API_KEY: 'dummy-test-val' });
+    assert.equal(executors.find((e) => e.id === 'gemini').available, true);
+    assert.equal(executors.find((e) => e.id === 'openai').available, false);
+
+    const imgPath = path.join(dir, 'anchor.png');
+    const fakePng = makeFakePng(800, 1000);
+    fs.writeFileSync(imgPath, fakePng);
+    const store = new StudioStore(path.join(dir, 'studio-home'));
+    const job = store.createJobFromFile({ imagePath: imgPath, mode: 'autonomous', autoRun: true });
+
+    let capturedUrl = '';
+    const mockFetch = async (url) => {
+      capturedUrl = url;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          candidates: [
+            { content: { parts: [{ inlineData: { mimeType: 'image/png', data: fakePng.toString('base64') } }] } }
+          ]
+        })
+      };
+    };
+
+    const result = await executeRenderWithProvider({
+      store,
+      job,
+      provider: 'gemini',
+      apiKey: 'dummy-test-val',
+      fetchImpl: mockFetch
+    });
+    assert.match(capturedUrl, /gemini-2\.5-flash-image:generateContent/);
+    assert.equal(result.fileName, 'gemini_render.png');
+    assert.ok(Buffer.isBuffer(result.buffer));
+  } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -161,7 +299,7 @@ test('installStudioClients writes Codex TOML, Gemini JSON, Claude JSON, and port
   }
 });
 
-test('stdio MCP server serves initialize, tools/list, and full studio job workflow', async () => {
+test('stdio MCP server serves v2.0.0 initialize, 13 tools, studio_run_autonomous, and studio_run_directed', async () => {
   const dir = makeTempDir();
   try {
     const imgPath = path.join(dir, 'portrait.png');
@@ -174,7 +312,7 @@ test('stdio MCP server serves initialize, tools/list, and full studio job workfl
 
     const responses = [];
     await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('MCP server test timeout')), 4000);
+      const timer = setTimeout(() => reject(new Error('MCP server test timeout')), 5000);
       let buf = '';
       child.stdout.on('data', (chunk) => {
         buf += chunk.toString('utf8');
@@ -183,7 +321,7 @@ test('stdio MCP server serves initialize, tools/list, and full studio job workfl
         for (const l of lines) {
           if (!l.trim()) continue;
           responses.push(JSON.parse(l));
-          if (responses.length === 4) {
+          if (responses.length === 5) {
             clearTimeout(timer);
             resolve();
           }
@@ -192,22 +330,23 @@ test('stdio MCP server serves initialize, tools/list, and full studio job workfl
 
       child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }) + '\n');
       child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }) + '\n');
-      child.stdin.write(
-        JSON.stringify({
-          jsonrpc: '2.0',
-          id: 3,
-          method: 'tools/call',
-          params: { name: 'studio_list_crew', arguments: {} }
-        }) + '\n'
-      );
+      child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'studio_list_crew', arguments: {} } }) + '\n');
       child.stdin.write(
         JSON.stringify({
           jsonrpc: '2.0',
           id: 4,
           method: 'tools/call',
+          params: { name: 'studio_run_autonomous', arguments: { imagePath: imgPath } }
+        }) + '\n'
+      );
+      child.stdin.write(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 5,
+          method: 'tools/call',
           params: {
-            name: 'studio_create_job',
-            arguments: { imagePath: imgPath, preset: 'cinema-night', brief: 'Night cafe scene' }
+            name: 'studio_run_directed',
+            arguments: { imagePath: imgPath, brief: 'Mantenha minha pose e roupa, ajuste sutil na luz', scope: 'subtle-retouch' }
           }
         }) + '\n'
       );
@@ -215,12 +354,16 @@ test('stdio MCP server serves initialize, tools/list, and full studio job workfl
 
     child.kill();
     assert.equal(responses[0].result.serverInfo.name, 'ai-photo-studio');
-    assert.equal(responses[1].result.tools.length, 9);
+    assert.equal(responses[0].result.serverInfo.version, '2.0.0');
+    assert.equal(responses[1].result.tools.length, 13);
     const crewRes = JSON.parse(responses[2].result.content[0].text);
-    assert.equal(crewRes.crew.length, 7);
-    const jobRes = JSON.parse(responses[3].result.content[0].text);
-    assert.equal(jobRes.job.preset, 'cinema-night');
-    assert.equal(jobRes.job.sourceImage.width, 900);
+    assert.equal(crewRes.crew.length, 8);
+    const autoRes = JSON.parse(responses[3].result.content[0].text);
+    assert.equal(autoRes.job.mode, 'autonomous');
+    assert.equal(autoRes.job.proposals.length, 3);
+    const directRes = JSON.parse(responses[4].result.content[0].text);
+    assert.equal(directRes.job.mode, 'directed');
+    assert.equal(directRes.job.interventionScope, 'subtle-retouch');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -233,7 +376,7 @@ test('product-commercial preset omits portrait skin/eye terms and Web UI uses dy
     fs.writeFileSync(imgPath, makeFakePng(1600, 1200));
 
     const store = new StudioStore(path.join(dir, 'studio-home'));
-    const job = store.createJobFromFile({ imagePath: imgPath, preset: 'product-commercial', brief: 'Studio monitor' });
+    const job = store.createJobFromFile({ imagePath: imgPath, preset: 'product-commercial', brief: 'Studio monitor', autoRun: true });
 
     assert.doesNotMatch(job.promptPacks.codexPrompt, /skin pores|dead eyes|catchlights/i);
     assert.doesNotMatch(job.promptPacks.geminiPrompt, /skin pores|dead eyes|catchlights/i);

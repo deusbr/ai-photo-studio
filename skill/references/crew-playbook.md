@@ -1,26 +1,25 @@
-# Studio Crew Playbook Reference
+# Studio Crew Playbook Reference (v2.0)
 
-## 1. Optical & Camera Standards
-- **85mm f/1.4 – f/1.8:** Primary portrait focal length; eliminates wide-angle facial distortion and produces creamy background separation.
-- **105mm / 135mm f/2.0:** High-fashion editorial compression for headshots and runway/magazine frames.
-- **50mm f/1.2:** Natural human-eye perspective for environmental half-body portraits and night scenes.
-- **35mm f/1.4:** Storytelling environmental framing; keep subject inside the central third to avoid edge stretching.
+## 1. Intervention Scope Rules
+- **`subtle-retouch`:** Keep exact pose, expression, wardrobe, and background. Upgrade only tonal balance, optical clarity, distracting sensor noise/glare, and natural directional light fill.
+- **`targeted-edit`:** Lock identity, pose, and framing; modify only the explicitly requested zone (e.g., backdrop swap, lighting mood shift, garment change).
+- **`full-editorial`:** Treat the anchor photo strictly as biometric/product identity. Apply Visual Anti-Inertia to upgrade pose dynamics, prime lens compression, lighting architecture, and set design.
 
-## 2. Lighting Architecture
-- **Short Lighting:** Key light illuminates the side of the face angled away from the camera, sculpting cheekbones and jawline.
-- **Rembrandt Lighting:** 45-degree lateral/elevated key light creating a subtle triangle of light on the shadow-side cheek.
-- **Rim / Hair Separation:** 135-degree backlight separating hair and shoulders from dark backgrounds.
-- **Catchlights:** Crisp specular light reflections at 10 o'clock and/or 2 o'clock on the iris are mandatory for lifelike portraits.
+## 2. Guardião de Consistência (Zero-Invention Policy)
+- **Single Subject:** Lock bone structure, skin tone, facial hair/makeup, hair texture, and eye color.
+- **Couple / Duo:** Preserve both subjects' exact identities, relative height, and subject count (`2`). Never blend faces or invent third figures.
+- **Commercial Product:** Preserve exact geometry, brand logos, label typography, and authentic material finish. Omit all portrait skin/eye terms.
 
-## 3. Pose & Anatomy Rules
-- **Jawline Definition:** Subtle forehead-and-chin forward projection toward the lens rather than pulling the head back.
-- **Relaxed Confidence Gaze:** Slight lift of the lower eyelid with relaxed upper eyelid, avoiding wide-eyed flash shock.
-- **Asymmetric Posture:** Weight shifted onto the rear leg, torso rotated 35–45 degrees, front shoulder lowered 2–5 cm, joints softly bent.
-- **Hands:** Always anchor hands with purpose (pockets, sleeve/watch, prop, surface).
+## 3. Optical & Lighting Standards
+- **85mm f/1.4 – f/1.8:** Primary solo portrait lens eliminating smartphone 24–28mm edge distortion.
+- **105mm f/2.0:** Executive/editorial compression for headshots.
+- **50mm f/1.2 – f/2.0:** Natural perspective for couples/duos and nocturnal environmental frames.
+- **90mm f/5.6 macro-tilt:** Commercial product sharpness edge-to-edge on brand typography.
+- **Catchlights:** Mandatory 10 and/or 2 o'clock iris reflections for human portraits; controlled strip-softbox specular roll-off for products.
 
-## 4. QA Rejection Triggers (`verdict: "revise"`)
-- Face or product logo drift compared to anchor image
-- Waxy/airbrushed plastic skin or missing pores/fabric weave
-- Missing iris catchlights or mismatched eye reflections
-- Extra/fused fingers or impossible joint angles
-- Replicating the amateur flat pose or distortion of the original snapshot
+## 4. Anti-AI QA Rejection & Routing Triggers (`verdict: "revise"`)
+- `identityFidelityScore < 8` -> Routes to `consistency-guardian` + `prompt-editor`
+- `realismScore < 7.5` or `textureAndCatchlightsOk === false` -> Routes to `lighting-director` + `camera-optics` + `prompt-editor`
+- `lightingCoherenceScore < 7.5` -> Routes to `lighting-director` + `prompt-editor`
+- `anatomyScore < 7.5` -> Routes to `art-stylist` + `prompt-editor`
+- `framingScore < 7` -> Routes to `forensic-analyst` + `prompt-editor`

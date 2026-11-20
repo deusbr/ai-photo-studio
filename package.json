@@ -1,14 +1,14 @@
 {
   "name": "ai-photo-studio",
-  "version": "1.0.1",
-  "description": "Zero-dependency full-crew AI photo editing studio (MCP server + portable SKILL.md + Local Web Studio) for Codex, Gemini CLI, and Claude Code/Desktop — using your existing plan subscription.",
+  "version": "2.0.0",
+  "description": "Zero-dependency 8-agent Autonomous & Directed AI Photo Studio (MCP server + portable SKILL.md + Local Web Workbench) for OpenBot, Codex, Gemini CLI, and Claude Code/Desktop.",
   "main": "index.cjs",
   "bin": {
     "ai-photo-studio": "./bin/ai-photo-studio.cjs",
     "ai-photo-studio-mcp": "./bin/mcp-server.cjs"
   },
   "scripts": {
-    "check": "node --check index.cjs && node --check bin/ai-photo-studio.cjs && node --check bin/mcp-server.cjs && node --check lib/image-meta.cjs && node --check lib/crew.cjs && node --check lib/store.cjs && node --check lib/studio-web.cjs && node --check lib/installers.cjs && node --check tests/studio.test.cjs",
+    "check": "node --check index.cjs && node --check bin/ai-photo-studio.cjs && node --check bin/mcp-server.cjs && node --check lib/image-meta.cjs && node --check lib/crew.cjs && node --check lib/orchestrator.cjs && node --check lib/executors.cjs && node --check lib/store.cjs && node --check lib/studio-web.cjs && node --check lib/installers.cjs && node --check tests/studio.test.cjs",
     "test": "node --test tests/studio.test.cjs"
   },
   "keywords": [

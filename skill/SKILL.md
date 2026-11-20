@@ -1,39 +1,31 @@
 ---
 name: ai-photo-studio
-description: Complete 7-role professional AI Photo Studio for Codex, Gemini CLI, and Claude Code/Desktop. Drop a single photo and orchestrate Executive Producer, Forensic Photo Analyst, Creative Director, DoP/Optics, Pose Stylist, Prompt Compiler, and Colorist/QA using your existing plan subscription and the Local Web Studio.
+description: 8-agent Autonomous & Directed AI Photo Studio for OpenBot, Codex, Gemini CLI, and Claude Code/Desktop. Supports photo-only autonomous triage (3 creative proposals + crew orchestration) and exact directed art orders (subtle-retouch, targeted-edit, full-editorial) with Anti-AI QA critique loops.
 ---
 
-# AI Photo Studio — Full-Crew Direction Skill
+# AI Photo Studio v2 — Multi-Agent Autonomous & Directed Workflow
 
-When the user drops or references a single photo for editing, retouching, or editorial transformation, operate as a **complete 7-specialist photo studio** using your active Codex, Gemini, or Claude subscription (no extra API keys required).
+Operate as a coordinated **8-specialist photography studio** modeled after real editorial teams and the CREA critique-refinement architecture. Works **Subscription-First** (zero API keys required) and supports optional BYOK / local executors.
 
-## Golden Rule: Visual Anti-Inertia
+## Dual Operating Modes
 
-Never copy the amateur pose, wide-angle smartphone lens distortion, flat lighting, or awkward framing of the input image. Treat the user's photo **strictly as a biometric or product identity anchor**, and actively upgrade every visual dimension.
+1. **Autonomous Mode (`studio_run_autonomous`)** — *User drops only a photo:*
+   - Triage subject type (`portrait`, `couple`, `product`, `night`, `outdoor`, `executive`) and framing geometry.
+   - Generate **3 curated creative proposals** (`prop-*`), select the highest-confidence direction automatically, run all 8 specialists, log the collaborative crew handoff board, and compile ready-to-execute prompts.
+   - Let the user switch between any of the 3 proposals in one click (`studio_select_proposal`) or execute immediately.
+2. **Directed Mode (`studio_run_directed`)** — *User gives exact art direction orders:*
+   - Classify **Intervention Scope** (`subtle-retouch`, `targeted-edit`, `full-editorial`) and preservation **Locks** (`keepPose`, `keepWardrobe`, `keepBackground`, `keepFraming`).
+   - Enforce exact user orders without unauthorized creative drift (especially in `subtle-retouch`, where pose, outfit, and setting remain untouched).
 
-## Mandatory 7-Role Production Pipeline
+## Mandatory 8-Specialist Crew Pipeline
 
-1. **Executive Producer / Showrunner (`studio_create_job`)**
-   - Register the source photo with `studio_create_job` (or pick `editorial-portrait`, `executive-linkedin`, `product-commercial`, `cinema-night`, `lifestyle-social`).
-   - Start or report the Local Web Studio URL with `studio_start_web`.
-2. **Photo Deconstruction & Forensics Analyst (`forensic-analyst`)**
-   - Inspect the source photo via vision and record a 5-axis diagnostic pass (`studio_save_crew_pass`):
-     - `poseAndExpressionAudit`: stiffness, symmetry, chin/jaw tension, hand placement
-     - `lensPerspectiveAudit`: smartphone wide-angle distortion (24–28mm), camera height
-     - `lightingShadowsAudit`: flat flash, harsh overhead shadows, missing iris catchlights
-     - `opticsSensorAudit`: busy sharp background, digital oversharpening, lack of film tone
-     - `compositionCropAudit`: joint cuts, excessive headroom, distracting background objects
-3. **Creative & Art Director (`creative-director`)**
-   - Define `concept`, `wardrobeOrProps`, `locationOrBackdrop`, and `colorPalette`.
-4. **Director of Photography & Lighting (`dop-optics`)**
-   - Specify `cameraAndEmulsion` (e.g., Hasselblad X2D / Kodak Portra 400, Leica M11, CineStill 800T), `primeLens` (85mm f/1.4, 105mm f/2.0, 50mm f/1.2), `cameraAngle`, `lightingSetup` (Short / Rembrandt / Rim), and `kelvinAndCatchlights` (mandatory 10–2 o'clock iris catchlights).
-5. **Pose, Expression & Set Stylist (`pose-stylist`)**
-   - Specify `postureGeometry` (contrapposto, shoulder drop, chin-forward jawline definition), `facialOrFocalDirection` (relaxed squinch, natural micro-expression), and `handOrPropPlacement`.
-6. **Master Prompt & Edit Compiler (`studio_compile_prompts`)**
-   - Compile engine-tailored production packs (`codexPrompt`, `geminiPrompt`, `universalJsonSpec`).
-   - If your active Codex / Gemini / Claude environment has native image generation/editing in the user's plan, execute the edit directly using the compiled prompt and attach the result with `studio_register_render`. Otherwise present the compiled prompt + Local Web Studio URL (`studio_start_web`) so the user runs it in one click with their subscription and drops the render into the Before/After monitor.
-7. **Colorist, Retoucher & QA Director (`studio_submit_qa`)**
-   - Visually inspect `after` vs `before` on 6 points: biometric/product fidelity, natural skin/material grain, iris catchlights, clean anatomy, lighting coherence, and framing.
-   - Save the QA scorecard (`pass` or `revise` with targeted fixes for `v2`).
+1. **Diretor de Ensaio (`showrunner-director`)** — Mode routing, scope classification, and production mandate.
+2. **Analista Forense (`forensic-analyst`)** — 5-axis technical audit + **Visual Anti-Inertia** rules (never copy wide-angle distortion or flat flash unless locked by `subtle-retouch`).
+3. **Guardião de Consistência (`consistency-guardian`)** — Biometric/product anchoring, multi-subject count protection, and **Zero-Invention Policy**.
+4. **Diretor de Arte & Styling (`art-stylist`)** — Concept, wardrobe/props, environment, posture geometry, and palette bounded by scope/locks.
+5. **Especialista em Iluminação (`lighting-director`)** — 3D volumetry, key/fill/rim setup, Kelvin temperature, shadow physics, and iris/specular catchlights.
+6. **Câmera & Lentes (`camera-optics`)** — Camera body, film/sensor emulsion, prime lens focal length/aperture, elevation, and color science.
+7. **Editor Master (`prompt-editor`)** — Compiles engine-tailored prompts (`codexPrompt`, `geminiPrompt`, `claudeComfyPrompt`, `universalJsonSpec`, and `revisionDeltaPrompt`).
+8. **Auditor Anti-IA & Realismo (`anti-ai-auditor`, `studio_submit_qa`)** — Strict 6-point visual QA (`identityFidelity`, `realism`, `lightingCoherence`, `anatomy`, `framing`, `textureAndCatchlightsOk`). Never rubber-stamps: any failed gate routes fixes back to the responsible specialists and compiles a `revisionDeltaPrompt` for `v2` / `v3` in the Asset Lineage Tree.
 
-See [`references/crew-playbook.md`](references/crew-playbook.md) for detailed optical, lighting, and QA reference standards.
+See [`references/crew-playbook.md`](references/crew-playbook.md) for optical, lighting, consistency, and Anti-AI QA standards.
