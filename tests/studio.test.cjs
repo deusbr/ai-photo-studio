@@ -380,18 +380,20 @@ test('stdio MCP server serves v2.3.0 initialize, 15 tools, studio_run_autonomous
 
     child.kill();
     assert.equal(responses[0].result.serverInfo.name, 'ai-photo-studio');
-    assert.equal(responses[0].result.serverInfo.version, '2.3.0');
+    assert.equal(responses[0].result.serverInfo.version, '3.0.0');
     assert.equal(responses[1].result.tools.length, 15);
     const crewRes = JSON.parse(responses[2].result.content[0].text);
     assert.equal(crewRes.crew.length, 8);
     const autoRes = JSON.parse(responses[3].result.content[0].text);
     assert.equal(autoRes.job.mode, 'autonomous');
+    assert.equal(autoRes.job.directionSource, 'offline-fallback');
     assert.equal(autoRes.job.proposals.length, 3);
     const directRes = JSON.parse(responses[4].result.content[0].text);
     assert.equal(directRes.job.mode, 'directed');
     assert.equal(directRes.job.interventionScope, 'subtle-retouch');
     const essayRes = JSON.parse(responses[5].result.content[0].text);
     assert.equal(essayRes.job.essayMode, true);
+    assert.equal(essayRes.job.essaySource, 'offline-fallback');
     assert.equal(essayRes.job.essayFrames.length, 4);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -448,9 +450,18 @@ test('Multi-shot Photo Essay, mobile screenshot crop detector, and optional Visi
                   {
                     text: JSON.stringify({
                       subjectType: 'couple',
+                      essenceAnalysis: 'Intimate relaxed Sunday afternoon warmth in casual cream streetwear.',
                       expressionTruth: 'Man calm closed-mouth; woman warm natural smile',
                       garmentMicroDetails: 'Cream placket striped polo with left-chest circular badge',
-                      recommendedLocation: 'Sunlit modern concrete cafe lounge'
+                      recommendedLocation: 'Sunlit modern concrete cafe lounge',
+                      motivatedLightSource: 'Soft north-facing glass window 45 degrees camera-left',
+                      contrastRatio: '3:1 sculpted editorial ratio',
+                      negativeFill: 'Heavy black V-flat negative fill on camera-right shadow side',
+                      kelvinSeparation: '5200K daylight subject key vs 6500K cool shaded background',
+                      customEssayFrames: [
+                        { id: 'bespoke-1', title: 'Bookstore Window Reflection', lens: '50mm f/1.4', angle: 'Over-shoulder reflection', location: 'Independent art bookstore window', lighting: 'Soft sky bounce', pose: 'Browsing art books side by side' },
+                        { id: 'bespoke-2', title: 'Vinyl Listening Lounge', lens: '35mm f/2.0', angle: 'Low corner framing', location: 'Warm timber listening bar', lighting: '3200K tungsten lamp motivated key', pose: 'Sharing headphones candidly' }
+                      ]
                     })
                   }
                 ]
@@ -461,7 +472,12 @@ test('Multi-shot Photo Essay, mobile screenshot crop detector, and optional Visi
       })
     });
     const enriched = store.applyVisionAnalysis(essay.id, visionResult.analysis, visionResult.provider);
+    assert.equal(enriched.essaySource, 'essence-vision-synthesized');
+    assert.equal(enriched.essayFrames[0].title, 'Bookstore Window Reflection');
     assert.match(enriched.promptPacks.codexPrompt, /Cream placket striped polo/);
+    assert.match(enriched.promptPacks.codexPrompt, /3:1 sculpted editorial ratio/);
+    assert.match(enriched.promptPacks.codexPrompt, /negative fill/i);
+    assert.match(enriched.essayFrames[0].codexPrompt, /Bookstore Window Reflection/);
     assert.match(enriched.essayFrames[0].codexPrompt, /Man calm closed-mouth/);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });

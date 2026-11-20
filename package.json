@@ -1,7 +1,7 @@
 {
   "name": "ai-photo-studio",
-  "version": "2.3.0",
-  "description": "Zero-dependency 8-agent Autonomous, Directed & Multi-Shot Photo Essay Studio (MCP server + portable SKILL.md + Local Web Workbench) for OpenBot, Codex, Gemini CLI, and Claude Code/Desktop.",
+  "version": "3.0.0",
+  "description": "Zero-dependency 8-agent Essence-Driven AI Photo Studio (Autonomous, Directed & Bespoke Multi-Shot Essays with Motivated Cinematography Lighting) for OpenBot, Codex, Gemini CLI, and Claude.",
   "main": "index.cjs",
   "bin": {
     "ai-photo-studio": "./bin/ai-photo-studio.cjs",

@@ -71,14 +71,16 @@ const TOOLS = [
   },
   {
     name: 'studio_run_autonomous',
-    description: 'Autonomous mode: pass a photo (or jobId) and let the 8-agent crew triage, propose 3 directions, and compile prompts.',
+    description: 'Autonomous mode: triage photo and run 8-agent crew. Pass essenceAnalysis & customProposals synthesized from vision to avoid static templates.',
     inputSchema: {
       type: 'object',
       properties: {
         jobId: { type: 'string' },
         imagePath: { type: 'string' },
         subjectHint: { type: 'string', enum: SUBJECT_ENUM },
-        proposalId: { type: 'string' }
+        proposalId: { type: 'string' },
+        essenceAnalysis: { type: 'string', description: 'Essence & visual subtext extracted from the photo.' },
+        customProposals: { type: 'array', items: { type: 'object' }, description: '3 bespoke creative directions derived from photo essence.' }
       },
       additionalProperties: false
     }
@@ -111,7 +113,7 @@ const TOOLS = [
   },
   {
     name: 'studio_run_essay',
-    description: 'Plan and compile a cohesive multi-photo essay (2-6 frames, default 5) varying lenses, poses, and camera angles while preserving identity and garment locks.',
+    description: 'Plan and compile a cohesive multi-photo essay (2-6 frames). Pass essenceAnalysis & customFrames synthesized from the photo essence rather than static templates.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -120,7 +122,9 @@ const TOOLS = [
         count: { type: 'integer', description: 'Number of shots (2-6, default 5).' },
         subjectHint: { type: 'string', enum: SUBJECT_ENUM },
         brief: { type: 'string' },
-        keepWardrobe: { type: 'boolean' }
+        keepWardrobe: { type: 'boolean' },
+        essenceAnalysis: { type: 'string', description: 'Essence & visual subtext extracted from the anchor photo.' },
+        customFrames: { type: 'array', items: { type: 'object' }, description: 'Bespoke storyboard frames derived from the photo essence.' }
       },
       additionalProperties: false
     }
@@ -298,7 +302,9 @@ async function handleToolCall(name, args = {}) {
       return {
         job: store.runAutonomous(jobId, {
           subjectHint: args.subjectHint,
-          proposalId: args.proposalId
+          proposalId: args.proposalId,
+          essenceAnalysis: args.essenceAnalysis,
+          customProposals: args.customProposals
         })
       };
     }
@@ -337,6 +343,8 @@ async function handleToolCall(name, args = {}) {
           count: args.count || 5,
           subjectHint: args.subjectHint,
           brief: args.brief,
+          essenceAnalysis: args.essenceAnalysis,
+          customFrames: args.customFrames,
           locks: { keepWardrobe: args.keepWardrobe !== false }
         })
       };

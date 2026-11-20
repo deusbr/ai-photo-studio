@@ -5,7 +5,7 @@
 [![Node.js >= 18](https://img.shields.io/badge/node-%3E%3D18.0.0-339933?logo=node.js&logoColor=white)](package.json)
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](package.json)
 
-Zero-dependency **8-Agent Autonomous & Directed AI Photo Studio** for **OpenBot**, **Codex**, **Gemini CLI**, and **Claude Code / Claude Desktop** — combining a portable multi-agent **Skill (`SKILL.md`)**, a **`stdio` MCP Server**, a **CLI**, and a **Local Web Studio Workbench**.
+Zero-dependency **8-Agent Essence-Driven AI Photo Studio** for **OpenBot**, **Codex**, **Gemini CLI**, and **Claude Code / Claude Desktop** — extracting the visual essence of any anchor photo to synthesize bespoke directions and multi-shot essays using real cinematography lighting physics (motivated light, contrast ratios, negative fill, Kelvin separation) without canned scene clichés.
 
 Built to run **Subscription-First** (zero API keys required) on your existing AI plan, with optional BYOK execution (`GEMINI_API_KEY` / `OPENAI_API_KEY` / `COMFYUI_URL`) when configured.
 
@@ -31,9 +31,9 @@ Optional `--analyze` / `studio_analyze_photo` runs standalone BYOK vision extrac
 | 1 | **Diretor de Ensaio** | `showrunner-director` | Mode routing (`autonomous` / `directed`), scope classification, and production mandate. |
 | 2 | **Analista Forense** | `forensic-analyst` | 5-axis technical photo audit + **Visual Anti-Inertia** rules. |
 | 3 | **Guardião de Consistência** | `consistency-guardian` | Biometric/product anchoring, `expressionTruth`, `garmentMicroDetails` (logos/patches/stripes), `antiBeautificationLocks`, and **Zero-Invention Policy**. |
-| 4 | **Diretor de Arte & Styling** | `art-stylist` | Concept, wardrobe/props, set/backdrop, posture geometry, and palette bounded by locks. |
-| 5 | **Especialista em Iluminação** | `lighting-director` | 3D volumetry, key/fill/rim architecture, Kelvin temperature, and iris/specular catchlights. |
-| 6 | **Câmera & Lentes** | `camera-optics` | Camera body, film/sensor emulsion, prime lens, angle, and color science. |
+| 4 | **Diretor de Arte & Styling** | `art-stylist` | Extracts `essenceAnalysis` first, then designs bespoke world-building, foreground depth layering, frame-within-a-frame composition, and skin-safe color harmony. |
+| 5 | **Especialista em Iluminação** | `lighting-director` | Architects physically motivated light sources, contrast ratios (`2:1`–`8:1`), negative fill shadow sculpting, Kelvin separation, and iris catchlights. |
+| 6 | **Câmera & Lentes** | `camera-optics` | Specifies camera body, prime focal compression, optical character (vignette/bloom/grain), and melanin-safe sub-surface skin color science. |
 | 7 | **Editor Master** | `prompt-editor` | Compiles `codexPrompt`, `geminiPrompt`, `claudeComfyPrompt`, `universalJsonSpec`, and `revisionDeltaPrompt`. |
 | 8 | **Auditor Anti-IA & Realismo** | `anti-ai-auditor` | 8-axis Anti-Slop & Garment QA gatekeeper (`pass` / `revise`) with targeted **Correction Routing** and Asset Lineage (`v1 -> v2 -> v3`). |
 

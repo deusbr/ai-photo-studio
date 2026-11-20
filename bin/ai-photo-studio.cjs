@@ -127,7 +127,8 @@ async function main() {
       console.log(JSON.stringify(job, null, 2));
       return;
     }
-    console.log(`Job ${job.id} [AUTONOMOUS | ${job.subjectType} | ${job.interventionScope}]${job.sourceImage.cropApplied ? ' [UI AUTO-CROPPED]' : ''}`);
+    console.log(`Job ${job.id} [AUTONOMOUS | ${job.subjectType} | ${job.directionSource}]${job.sourceImage.cropApplied ? ' [UI AUTO-CROPPED]' : ''}`);
+    if (job.essenceAnalysis) console.log(`Essence: ${job.essenceAnalysis}`);
     console.log(`Selected Proposal: ${job.selectedProposalId} (${job.preset})`);
     console.log('Proposals:', job.proposals.map((p) => `${p.id}: ${p.label}`).join(' | '));
     console.log('\n--- Codex Prompt ---\n' + job.promptPacks.codexPrompt);
@@ -192,7 +193,10 @@ async function main() {
       console.log(JSON.stringify(job, null, 2));
       return;
     }
-    console.log(`Job ${job.id} [ESSAY | ${job.essayCount} frames | ${job.subjectType}]${job.sourceImage.cropApplied ? ' [UI AUTO-CROPPED]' : ''}`);
+    console.log(`Job ${job.id} [ESSAY | ${job.essayCount} frames | ${job.subjectType} | ${job.essaySource}]${job.sourceImage.cropApplied ? ' [UI AUTO-CROPPED]' : ''}`);
+    if (job.essaySource === 'offline-fallback') {
+      console.log('Note: using offline fallback scenes; pass --analyze (with API key) or run inside an AI host with vision for bespoke essence-synthesized scenes.');
+    }
     for (const f of job.essayFrames) {
       console.log(`  ${f.index}. ${f.title} (${f.lens}) — ${f.location}`);
     }
