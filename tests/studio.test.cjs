@@ -10,11 +10,14 @@ const { spawn } = require('node:child_process');
 const {
   inspectImageFile,
   classifyImageGeometry,
+  detectScreenshotCropBox,
+  prepareCleanAnchor,
   getCrewList,
   normalizeRoleId,
   parseDirectedIntent,
   detectAvailableExecutors,
   executeRenderWithProvider,
+  analyzeAnchorWithVision,
   StudioStore,
   createStudioWebServer,
   getClientTargets,
@@ -311,7 +314,7 @@ test('installStudioClients writes Codex TOML, Gemini JSON, Claude JSON, and port
   }
 });
 
-test('stdio MCP server serves v2.0.0 initialize, 13 tools, studio_run_autonomous, and studio_run_directed', async () => {
+test('stdio MCP server serves v2.3.0 initialize, 15 tools, studio_run_autonomous, studio_run_directed, and studio_run_essay', async () => {
   const dir = makeTempDir();
   try {
     const imgPath = path.join(dir, 'portrait.png');
@@ -333,7 +336,7 @@ test('stdio MCP server serves v2.0.0 initialize, 13 tools, studio_run_autonomous
         for (const l of lines) {
           if (!l.trim()) continue;
           responses.push(JSON.parse(l));
-          if (responses.length === 5) {
+          if (responses.length === 6) {
             clearTimeout(timer);
             resolve();
           }
@@ -362,12 +365,23 @@ test('stdio MCP server serves v2.0.0 initialize, 13 tools, studio_run_autonomous
           }
         }) + '\n'
       );
+      child.stdin.write(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 6,
+          method: 'tools/call',
+          params: {
+            name: 'studio_run_essay',
+            arguments: { imagePath: imgPath, count: 4, subjectHint: 'couple' }
+          }
+        }) + '\n'
+      );
     });
 
     child.kill();
     assert.equal(responses[0].result.serverInfo.name, 'ai-photo-studio');
-    assert.equal(responses[0].result.serverInfo.version, '2.2.0');
-    assert.equal(responses[1].result.tools.length, 13);
+    assert.equal(responses[0].result.serverInfo.version, '2.3.0');
+    assert.equal(responses[1].result.tools.length, 15);
     const crewRes = JSON.parse(responses[2].result.content[0].text);
     assert.equal(crewRes.crew.length, 8);
     const autoRes = JSON.parse(responses[3].result.content[0].text);
@@ -376,6 +390,79 @@ test('stdio MCP server serves v2.0.0 initialize, 13 tools, studio_run_autonomous
     const directRes = JSON.parse(responses[4].result.content[0].text);
     assert.equal(directRes.job.mode, 'directed');
     assert.equal(directRes.job.interventionScope, 'subtle-retouch');
+    const essayRes = JSON.parse(responses[5].result.content[0].text);
+    assert.equal(essayRes.job.essayMode, true);
+    assert.equal(essayRes.job.essayFrames.length, 4);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('Multi-shot Photo Essay, mobile screenshot crop detector, and optional Vision auto-analyzer work end-to-end', async () => {
+  const dir = makeTempDir();
+  try {
+    const box = detectScreenshotCropBox({ width: 1080, height: 2209 });
+    assert.equal(box.left, 0);
+    assert.equal(box.top, 486);
+    assert.equal(box.width, 1080);
+    assert.equal(box.height, 1303);
+
+    const srcShot = path.join(dir, 'shot.png');
+    const assetsDir = path.join(dir, 'assets');
+    fs.mkdirSync(assetsDir, { recursive: true });
+    fs.writeFileSync(srcShot, makeFakePng(1080, 2209));
+    const clean = prepareCleanAnchor({
+      sourcePath: srcShot,
+      assetsDir,
+      meta: inspectImageFile(srcShot),
+      platform: 'win32',
+      execFileSyncImpl: (_cmd, _args, opts) => {
+        fs.writeFileSync(opts.env.APS_CROP_OUT, makeFakePng(1080, 1303));
+      }
+    });
+    assert.equal(clean.applied, true);
+    assert.equal(clean.assetName, 'anchor_clean.png');
+    assert.equal(clean.height, 1303);
+
+    const store = new StudioStore(path.join(dir, 'studio-home'));
+    const job = store.createJobFromFile({ imagePath: srcShot, autoCropScreenshot: false });
+    const essay = store.runEssay(job.id, { count: 5, subjectHint: 'couple' });
+    assert.equal(essay.essayMode, true);
+    assert.equal(essay.essayFrames.length, 5);
+    assert.notEqual(essay.essayFrames[0].lens, essay.essayFrames[3].lens);
+    assert.match(essay.essayFrames[0].codexPrompt, /STRICT PRESERVATION RULE/);
+
+    const visionResult = await analyzeAnchorWithVision({
+      store,
+      job: essay,
+      provider: 'gemini',
+      apiKey: 'dummy-test-key',
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    text: JSON.stringify({
+                      subjectType: 'couple',
+                      expressionTruth: 'Man calm closed-mouth; woman warm natural smile',
+                      garmentMicroDetails: 'Cream placket striped polo with left-chest circular badge',
+                      recommendedLocation: 'Sunlit modern concrete cafe lounge'
+                    })
+                  }
+                ]
+              }
+            }
+          ]
+        })
+      })
+    });
+    const enriched = store.applyVisionAnalysis(essay.id, visionResult.analysis, visionResult.provider);
+    assert.match(enriched.promptPacks.codexPrompt, /Cream placket striped polo/);
+    assert.match(enriched.essayFrames[0].codexPrompt, /Man calm closed-mouth/);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

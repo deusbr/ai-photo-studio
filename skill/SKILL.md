@@ -7,15 +7,17 @@ description: 8-agent Autonomous & Directed AI Photo Studio for OpenBot, Codex, G
 
 Operate as a coordinated **8-specialist photography studio** modeled after real editorial teams and the CREA critique-refinement architecture. Works **Subscription-First** (zero API keys required) and supports optional BYOK / local executors.
 
-## Dual Operating Modes
+## Operating Modes
 
 1. **Autonomous Mode (`studio_run_autonomous`)** — *User drops only a photo:*
-   - Triage subject type (`portrait`, `couple`, `product`, `night`, `outdoor`, `executive`) and framing geometry.
+   - Auto-strips tall mobile screenshot UI bars (`anchor_clean`), triages subject type (`portrait`, `couple`, `product`, `night`, `outdoor`, `executive`) and framing geometry.
    - Generate **3 curated creative proposals** (`prop-*`), select the highest-confidence direction automatically, run all 8 specialists, log the collaborative crew handoff board, and compile ready-to-execute prompts.
    - Let the user switch between any of the 3 proposals in one click (`studio_select_proposal`) or execute immediately.
 2. **Directed Mode (`studio_run_directed`)** — *User gives exact art direction orders:*
    - Classify **Intervention Scope** (`subtle-retouch`, `targeted-edit`, `full-editorial`) and preservation **Locks** (`keepPose`, `keepWardrobe`, `keepBackground`, `keepFraming`).
    - Enforce exact user orders without unauthorized creative drift (especially in `subtle-retouch`, where pose, outfit, and setting remain untouched).
+3. **Multi-Shot Photo Essay Mode (`studio_run_essay`)** — *User asks for a 4–5 photo shoot:*
+   - Plans and compiles a cohesive **2–6 shot storyboard** (`35mm` walk-by, `50mm` cafe/seated, `35mm` architectural, `85mm` intimate close-up, `50mm` golden-hour backlit) giving the Director full freedom over poses, lenses, and angles while sharing strict identity and garment locks across every frame.
 
 ## Mandatory 8-Specialist Crew Pipeline
 

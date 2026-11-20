@@ -11,12 +11,16 @@ Built to run **Subscription-First** (zero API keys required) on your existing AI
 
 ---
 
-## Dual Operating Modes
+## Operating Modes
 
 1. **Autonomous Mode (`auto` / `studio_run_autonomous`):**
-   Drop **only a photo** with zero instructions. The Showrunner & Forensic Analyst triage the image (`portrait`, `couple`, `product`, `executive`, `night`, `outdoor`), generate **3 curated creative proposals**, run the full 8-specialist crew pipeline, log the collaborative **Studio Channel Board**, and compile production prompts immediately. Switch between proposals in 1 click.
+   Drop **only a photo** with zero instructions. Tall mobile screenshots are auto-cropped (`anchor_clean`) to strip UI bars; the Showrunner & Forensic Analyst triage the image (`portrait`, `couple`, `product`, `executive`, `night`, `outdoor`), generate **3 curated creative proposals**, run the full 8-specialist crew pipeline, log the **Studio Channel Board**, and compile production prompts immediately.
 2. **Directed Mode (`direct` / `studio_run_directed`):**
    Give **exact art direction orders**. A bilingual (`EN` / `PT-BR`) intent classifier detects your **Intervention Scope** (`subtle-retouch`, `targeted-edit`, `full-editorial`) and locks immutable attributes (`keepPose`, `keepWardrobe`, `keepBackground`, `keepFraming`) so specialists execute your vision with zero unauthorized drift.
+3. **Multi-Shot Photo Essay Mode (`essay` / `studio_run_essay`):**
+   Plan and compile a cohesive **2–6 shot editorial storyboard** (default 5 shots: `35mm` walk-by, `50mm` cafe, `35mm` architectural courtyard, `85mm` intimate close-up, `50mm` golden-hour rim) varying lenses, poses, and camera angles while locking identity and garment micro-details across every frame.
+
+Optional `--analyze` / `studio_analyze_photo` runs standalone BYOK vision extraction (`GEMINI_API_KEY` or `OPENAI_API_KEY`) when running outside an AI host.
 
 ---
 
@@ -70,6 +74,9 @@ node bin/ai-photo-studio.cjs auto ./photo.jpg
 # Directed (Subtle Retouch): keep pose, outfit, and background — polish lighting only
 node bin/ai-photo-studio.cjs direct ./photo.jpg --brief "Mantenha minha pose, roupa e fundo; melhore apenas a iluminação" --scope subtle-retouch
 
+# Multi-Shot Essay: plan 5 varied shots (35mm, 50mm, 85mm) from one photo
+node bin/ai-photo-studio.cjs essay ./photo.jpg --count 5
+
 # Directed (Full Editorial): explicit art direction
 node bin/ai-photo-studio.cjs direct ./photo.jpg --brief "Editorial GQ night cafe portrait, 50mm f/1.2, CineStill 800T"
 ```
@@ -85,6 +92,8 @@ Open `http://127.0.0.1:4321` to switch between **Autonomous** and **Directed Ord
 - `studio_create_job` — intake anchor photo (with optional `autoRun`)
 - `studio_run_autonomous` — run full autonomous triage + 3 proposals + 8-agent orchestration
 - `studio_run_directed` — run directed orchestration enforcing brief, scope, and locks
+- `studio_run_essay` — plan and compile a 2–6 shot multi-angle photo essay storyboard
+- `studio_analyze_photo` — optional BYOK vision extraction (`GEMINI_API_KEY` / `OPENAI_API_KEY`)
 - `studio_select_proposal` — switch between autonomous proposals and recompile
 - `studio_save_crew_pass` — update/override any specialist pass (supports v1 role aliases)
 - `studio_compile_prompts` — recompile engine prompt packs

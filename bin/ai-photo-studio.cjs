@@ -5,7 +5,7 @@ const { getCrewList, STUDIO_PRESETS } = require('../lib/crew.cjs');
 const { StudioStore, defaultStudioHome } = require('../lib/store.cjs');
 const { createStudioWebServer } = require('../lib/studio-web.cjs');
 const { installStudioClients, checkStudioStatus } = require('../lib/installers.cjs');
-const { detectAvailableExecutors } = require('../lib/executors.cjs');
+const { detectAvailableExecutors, analyzeAnchorWithVision } = require('../lib/executors.cjs');
 
 function parseArgs(argv) {
   const [cmd = 'help', ...rest] = argv;
@@ -19,6 +19,8 @@ function parseArgs(argv) {
     scope: null,
     preset: null,
     subject: 'auto',
+    count: 5,
+    analyze: false,
     keepPose: false,
     keepWardrobe: false,
     keepBackground: false,
@@ -32,6 +34,8 @@ function parseArgs(argv) {
     else if (a === '--scope' && rest[i + 1]) opts.scope = rest[++i];
     else if (a === '--preset' && rest[i + 1]) opts.preset = rest[++i];
     else if (a === '--subject' && rest[i + 1]) opts.subject = rest[++i];
+    else if (a === '--count' && rest[i + 1]) opts.count = Number(rest[++i]) || 5;
+    else if (a === '--analyze') opts.analyze = true;
     else if (a === '--keep-pose') opts.keepPose = true;
     else if (a === '--keep-wardrobe') opts.keepWardrobe = true;
     else if (a === '--keep-background') opts.keepBackground = true;
@@ -47,8 +51,9 @@ function printUsage() {
     'Usage: ai-photo-studio <command> [options]',
     '',
     'Commands:',
-    '  auto <imagePath>     Run 8-agent Autonomous Mode (triages photo, proposes 3 concepts, compiles prompts)',
+    '  auto <imagePath>     Run 8-agent Autonomous Mode (auto-crops tall screenshots, proposes 3 concepts)',
     '  direct <imagePath>   Run 8-agent Directed Mode following --brief and optional --scope / --keep-* locks',
+    '  essay <imagePath>    Plan & compile a cohesive multi-shot Photo Essay (2-6 frames, default 5)',
     '  web                  Start Local Web Studio Workbench (default port 4321)',
     '  mcp                  Start stdio MCP Server',
     '  crew                 Print the 8 specialist crew roles',
@@ -57,7 +62,9 @@ function printUsage() {
     '  status               Check MCP + Skill installation status',
     '',
     'Options:',
-    '  --brief "..."        Exact art direction order for direct mode',
+    '  --count <2-6>        Number of frames for essay mode (default 5)',
+    '  --analyze            Run optional BYOK vision analysis (GEMINI_API_KEY / OPENAI_API_KEY) before compiling',
+    '  --brief "..."        Exact art direction order for direct or essay mode',
     '  --scope <scope>      subtle-retouch | targeted-edit | full-editorial',
     '  --preset <id>        Preset override',
     '  --subject <type>     auto | portrait | couple | product | night | outdoor | executive',
@@ -69,6 +76,12 @@ function printUsage() {
     '  --clients <list>     Comma-separated client ids',
     '  --json               Emit raw JSON output'
   ].join('\n'));
+}
+
+async function maybeAnalyze(store, job, enabled) {
+  if (!enabled) return job;
+  const vision = await analyzeAnchorWithVision({ store, job });
+  return store.applyVisionAnalysis(job.id, vision.analysis, vision.provider);
 }
 
 async function main() {
@@ -108,12 +121,13 @@ async function main() {
     if (!imagePath) throw new Error('Missing <imagePath>. Usage: ai-photo-studio auto <imagePath>');
     const store = new StudioStore(defaultStudioHome());
     const created = store.createJobFromFile({ imagePath, mode: 'autonomous', subjectHint: opts.subject });
-    const job = store.runAutonomous(created.id, { subjectHint: opts.subject });
+    let job = store.runAutonomous(created.id, { subjectHint: opts.subject });
+    job = await maybeAnalyze(store, job, opts.analyze);
     if (opts.json) {
       console.log(JSON.stringify(job, null, 2));
       return;
     }
-    console.log(`Job ${job.id} [AUTONOMOUS | ${job.subjectType} | ${job.interventionScope}]`);
+    console.log(`Job ${job.id} [AUTONOMOUS | ${job.subjectType} | ${job.interventionScope}]${job.sourceImage.cropApplied ? ' [UI AUTO-CROPPED]' : ''}`);
     console.log(`Selected Proposal: ${job.selectedProposalId} (${job.preset})`);
     console.log('Proposals:', job.proposals.map((p) => `${p.id}: ${p.label}`).join(' | '));
     console.log('\n--- Codex Prompt ---\n' + job.promptPacks.codexPrompt);
@@ -140,19 +154,48 @@ async function main() {
       locks,
       subjectHint: opts.subject
     });
-    const job = store.runDirected(created.id, {
+    let job = store.runDirected(created.id, {
       brief: opts.brief,
       scope: opts.scope,
       preset: opts.preset,
       locks,
       subjectHint: opts.subject
     });
+    job = await maybeAnalyze(store, job, opts.analyze);
     if (opts.json) {
       console.log(JSON.stringify(job, null, 2));
       return;
     }
-    console.log(`Job ${job.id} [DIRECTED | ${job.interventionScope} | ${job.preset}]`);
+    console.log(`Job ${job.id} [DIRECTED | ${job.interventionScope} | ${job.preset}]${job.sourceImage.cropApplied ? ' [UI AUTO-CROPPED]' : ''}`);
     console.log('\n--- Codex Prompt ---\n' + job.promptPacks.codexPrompt);
+    return;
+  }
+
+  if (opts.cmd === 'essay') {
+    const imagePath = opts.positional[0];
+    if (!imagePath) throw new Error('Missing <imagePath>. Usage: ai-photo-studio essay <imagePath> [--count 5]');
+    const store = new StudioStore(defaultStudioHome());
+    const created = store.createJobFromFile({
+      imagePath,
+      mode: 'directed',
+      brief: opts.brief,
+      subjectHint: opts.subject
+    });
+    let job = store.runEssay(created.id, {
+      count: opts.count,
+      subjectHint: opts.subject,
+      brief: opts.brief,
+      locks: { keepWardrobe: !opts.brief || opts.keepWardrobe }
+    });
+    job = await maybeAnalyze(store, job, opts.analyze);
+    if (opts.json) {
+      console.log(JSON.stringify(job, null, 2));
+      return;
+    }
+    console.log(`Job ${job.id} [ESSAY | ${job.essayCount} frames | ${job.subjectType}]${job.sourceImage.cropApplied ? ' [UI AUTO-CROPPED]' : ''}`);
+    for (const f of job.essayFrames) {
+      console.log(`  ${f.index}. ${f.title} (${f.lens}) — ${f.location}`);
+    }
     return;
   }
 

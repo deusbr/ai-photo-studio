@@ -5,7 +5,11 @@ const readline = require('node:readline');
 const { getCrewList, STUDIO_PRESETS } = require('../lib/crew.cjs');
 const { StudioStore, defaultStudioHome } = require('../lib/store.cjs');
 const { createStudioWebServer } = require('../lib/studio-web.cjs');
-const { detectAvailableExecutors, executeRenderWithProvider } = require('../lib/executors.cjs');
+const {
+  detectAvailableExecutors,
+  executeRenderWithProvider,
+  analyzeAnchorWithVision
+} = require('../lib/executors.cjs');
 
 const store = new StudioStore(defaultStudioHome());
 let webInstance = null;
@@ -101,6 +105,36 @@ const TOOLS = [
           },
           additionalProperties: false
         }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'studio_run_essay',
+    description: 'Plan and compile a cohesive multi-photo essay (2-6 frames, default 5) varying lenses, poses, and camera angles while preserving identity and garment locks.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        jobId: { type: 'string' },
+        imagePath: { type: 'string' },
+        count: { type: 'integer', description: 'Number of shots (2-6, default 5).' },
+        subjectHint: { type: 'string', enum: SUBJECT_ENUM },
+        brief: { type: 'string' },
+        keepWardrobe: { type: 'boolean' }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'studio_analyze_photo',
+    description: 'Optional BYOK vision pass: analyze the anchor photo via Gemini or OpenAI Vision to populate expressionTruth and garmentMicroDetails.',
+    inputSchema: {
+      type: 'object',
+      required: ['jobId'],
+      properties: {
+        jobId: { type: 'string' },
+        provider: { type: 'string', enum: ['auto', 'gemini', 'openai'] },
+        model: { type: 'string' }
       },
       additionalProperties: false
     }
@@ -289,6 +323,36 @@ async function handleToolCall(name, args = {}) {
           preset: args.preset,
           locks: args.locks
         })
+      };
+    }
+    case 'studio_run_essay': {
+      let jobId = args.jobId;
+      if (!jobId) {
+        if (!args.imagePath) throw new Error('Provide either jobId or imagePath.');
+        const created = store.createJobFromFile({ imagePath: args.imagePath, mode: 'directed', brief: args.brief || '' });
+        jobId = created.id;
+      }
+      return {
+        job: store.runEssay(jobId, {
+          count: args.count || 5,
+          subjectHint: args.subjectHint,
+          brief: args.brief,
+          locks: { keepWardrobe: args.keepWardrobe !== false }
+        })
+      };
+    }
+    case 'studio_analyze_photo': {
+      const current = store.readJob(args.jobId);
+      const vision = await analyzeAnchorWithVision({
+        store,
+        job: current,
+        provider: args.provider || 'auto',
+        model: args.model || ''
+      });
+      return {
+        job: store.applyVisionAnalysis(current.id, vision.analysis, vision.provider),
+        provider: vision.provider,
+        assetUsed: vision.assetUsed
       };
     }
     case 'studio_select_proposal':
