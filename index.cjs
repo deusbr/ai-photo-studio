@@ -3,6 +3,9 @@
 const { inspectImageFile, classifyImageGeometry } = require('./lib/image-meta.cjs');
 const { detectScreenshotCropBox, prepareCleanAnchor } = require('./lib/preprocess.cjs');
 const { STUDIO_CREW, STUDIO_PRESETS, normalizeRoleId, getCrewList, resolvePreset, buildProductionPacks } = require('./lib/crew.cjs');
+const { CRAFT_CATALOG } = require('./lib/craft-library.cjs');
+const { searchCraftCatalog, listCraftCatalog, researchPhotographyTechniques } = require('./lib/craft-research.cjs');
+const { recommendCraftStack } = require('./lib/craft-planner.cjs');
 const {
   inferSubjectTypeFromHints,
   parseDirectedIntent,
@@ -29,6 +32,11 @@ module.exports = {
   prepareCleanAnchor,
   STUDIO_CREW,
   STUDIO_PRESETS,
+  CRAFT_CATALOG,
+  searchCraftCatalog,
+  listCraftCatalog,
+  researchPhotographyTechniques,
+  recommendCraftStack,
   normalizeRoleId,
   getCrewList,
   resolvePreset,

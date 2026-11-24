@@ -1,31 +1,35 @@
-# Studio Crew Playbook Reference (v3.0 — Master Cinematography & Art Direction)
+# Studio Crew Playbook Reference (v4.0 — Master Cinematography, Posing, Optics & Makeup)
 
 ## 1. Essence Extraction Protocol (Before Any Scene Choice)
 - Read the anchor photo's **wardrobe archetype**, **color story**, **body language**, and **mood**.
 - Ask: *Where do these clothes, this person/couple/product, and this emotional energy genuinely belong in the real world?*
 - Ban cliché "stock AI" locations (random stone Roman balconies, generic neon alleys, sterile white infinity coves) unless motivated by the photo or user brief.
 
-## 2. Master Lighting Architecture (`lighting-director`)
-- **Motivated Light Source:** Every key light must have a believable physical origin in the scene (e.g., overcast north-facing glass window, open-shade archway, warm 3200K brass cafe pendant, late-afternoon golden sun).
-- **Contrast Ratios:**
-  - `2:1` — Open commercial / bright daylight lifestyle.
-  - `3:1 – 4:1` — Classic sculpted editorial portrait (1–2 stops drop into shadow side carving cheekbones).
-  - `5:1 – 8:1` — Moody chiaroscuro / nocturnal cinema.
-- **Negative Fill (Subtracting Light):** Explicitly darken/flag the shadow side with a black V-flat or dark architectural wall to absorb stray bounce, deepen skin richness, and restore 3D volume.
-- **Kelvin Separation:** Contrast foreground subject temperature against background depth (e.g., `5200K` daylight key on subject vs `6500K` cool open-shade background or `3200K` warm practical accents).
+## 2. Posing & Body Geometry (`art-stylist`)
+- **Contrapposto & S-Curve:** 80% weight on rear hip, soft front knee bend, front shoulder dropped 3 cm, torso 35° off-axis.
+- **Submental Jawline Sculpt (Turtle Technique):** Extend forehead/ears subtly forward toward lens and drop chin 3–5° to define the jawline cleanly.
+- **Edge-of-Hand Rule:** Present the side/edge of the hand toward camera with softly separated, gracefully curved fingers; never press flat palms into cheeks or body.
+- **Negative-Space Triangles:** Create deliberate triangular openings between arms and torso to sculpt the silhouette.
+- **Couple Zero-Overlap:** Stagger head heights 5–10 cm in an open V-angle so both faces stay tack-sharp in the focal plane.
 
-## 3. Master Composition & Optical Character (`art-stylist` + `camera-optics`)
-- **Foreground Depth Layering:** Shoot past subtle out-of-focus foreground elements (table edge, foliage, glass frame, doorway) to create 3-plane 3D immersion.
-- **Frame Within a Frame:** Use architectural doorways, window mullions, or natural shadow lines to isolate the subject naturally.
-- **Decisive Moment:** Capture candid mid-conversation, mid-step, or quiet breathing expressions — never stiff mannequin stares.
-- **Skin-Tone Color Science:** Preserve natural melanin distribution, rich sub-surface scattering, visible pores, vellus hair, and natural under-eye creases. Never flatten shadows into muddy grey or apply beauty filters.
+## 3. Master Lighting Architecture (`lighting-director`)
+- **Motivated Light Source:** Every key light must have a believable physical origin (north-facing overcast window, open-shade archway, 3200K brass cafe pendant, late-afternoon golden sun).
+- **Contrast Ratios:** `2:1` (commercial/beauty clamshell), `3:1 – 4:1` (sculpted Rembrandt editorial), `5:1 – 8:1` (chiaroscuro / cinema trailer noir).
+- **Negative Fill:** Black V-flat or dark architectural wall on the shadow side absorbing stray bounce to carve 3D facial volume.
+- **Kelvin Separation:** Contrast foreground subject temperature against background depth (`5200K` vs `6500K` shade, or `3200K` amber vs `6500K` slate-teal).
 
-## 4. Intervention Scope Rules
-- **`subtle-retouch`:** Keep exact pose, expression, wardrobe, and background. Upgrade only tonal balance, optical clarity, distracting glare/noise, and motivated fill.
-- **`targeted-edit`:** Lock identity, pose, and framing; modify only the explicitly requested zone.
-- **`full-editorial`:** Treat anchor strictly as biometric & wardrobe identity; execute full essence-driven scene, lighting, and optical upgrade.
+## 4. Camera, Lenses, Optical Filters & Effects (`camera-optics`)
+- **Focal Match Guardrail:** Never shoot tight beauty/headshots on `24mm` (causes nasal/forehead distortion); use `85mm f/1.4`, `105mm f/1.4`, or `135mm f/1.8`. Use `35mm` for documentary/street storytelling, `40mm Cooke Anamorphic` for `2.39:1` cinema trailer frames, and `90mm Macro Tilt-Shift` for product label perfection.
+- **Physical Optical Diffusion:** *Tiffen Black Pro-Mist (1/8 or 1/4)* and *Glimmerglass 1/4* bloom highlights organically without digital plastic skin smoothing.
+- **Cinema Trailer Look:** `ARRI Alexa 35` + `Kodak Vision3 500T`, `40mm Cooke Anamorphic`, `Black Pro-Mist 1/4`, subtle horizontal flare, volumetric haze, and `Teal & Amber` luminance-controlled grade.
 
-## 5. Anti-AI QA Rejection & Routing Triggers (`verdict: "revise"`)
+## 5. Editorial Makeup & Skin Realism (Zero Plastic Filter)
+- **No-Makeup / Natural Hydrated:** Neutral tone, groomed brows, visible pores, freckles, vellus hair.
+- **Editorial Glass Skin + Matte T-Zone:** Luminous wet-look sheen strictly on upper cheekbones/nose bridge while keeping T-zone softly matte and pore texture 100% intact.
+- **Deconstructed Cinema Kohl:** Smudged charcoal lashline, softly blurred natural lip stain, lived-in realism.
+- **Product Rule:** When `subjectType === 'product'`, strip all human skin, eye, pore, and makeup terminology from compiled prompts.
+
+## 6. Anti-AI QA Rejection & Routing Triggers (`verdict: "revise"`)
 - `identityFidelityScore < 8` -> Routes to `consistency-guardian` + `prompt-editor`
 - `antiSlopScore < 8` (plastic skin, beautification, mannequin stare, or generic AI smile) -> Routes to `consistency-guardian` + `prompt-editor`
 - `garmentFidelityScore < 8` (missing logos, patches, plackets, stripes, or color shift) -> Routes to `consistency-guardian` + `art-stylist` + `prompt-editor`

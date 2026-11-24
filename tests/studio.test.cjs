@@ -12,6 +12,12 @@ const {
   classifyImageGeometry,
   detectScreenshotCropBox,
   prepareCleanAnchor,
+  STUDIO_PRESETS,
+  CRAFT_CATALOG,
+  searchCraftCatalog,
+  listCraftCatalog,
+  researchPhotographyTechniques,
+  recommendCraftStack,
   getCrewList,
   normalizeRoleId,
   parseDirectedIntent,
@@ -380,8 +386,8 @@ test('stdio MCP server serves v2.3.0 initialize, 15 tools, studio_run_autonomous
 
     child.kill();
     assert.equal(responses[0].result.serverInfo.name, 'ai-photo-studio');
-    assert.equal(responses[0].result.serverInfo.version, '3.0.0');
-    assert.equal(responses[1].result.tools.length, 15);
+    assert.equal(responses[0].result.serverInfo.version, '4.0.0');
+    assert.equal(responses[1].result.tools.length, 18);
     const crewRes = JSON.parse(responses[2].result.content[0].text);
     assert.equal(crewRes.crew.length, 8);
     const autoRes = JSON.parse(responses[3].result.content[0].text);
@@ -504,9 +510,171 @@ test('product-commercial preset omits portrait skin/eye terms and Web UI uses dy
       const html = await (await fetch(info.url)).text();
       assert.match(html, /job\.sourceImage\.width/);
       assert.match(html, /max-height:\s*75vh/);
+      assert.match(html, /Craft Studio/);
+
+      const catRes = await fetch(`${info.url}/api/catalog`);
+      assert.equal(catRes.status, 200);
+      const catJson = await catRes.json();
+      assert.ok(catJson.poses.length >= 10);
+      assert.equal(catJson.presets.length, 10);
+
+      const resSearch = await fetch(`${info.url}/api/research`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ query: 'black pro-mist cinema trailer', liveWeb: false })
+      });
+      assert.equal(resSearch.status, 200);
+      const resJson = await resSearch.json();
+      assert.ok(resJson.curatedMatches.length >= 1);
     } finally {
       await web.close();
     }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('Craft catalog, live-web research + 24h cache, optical conflict guardrails, and cinema-trailer/beauty presets work end-to-end', async () => {
+  const dir = makeTempDir();
+  try {
+    assert.equal(Object.keys(STUDIO_PRESETS).length, 10);
+    assert.ok(CRAFT_CATALOG.poses.length >= 10);
+    assert.ok(CRAFT_CATALOG.makeup.length >= 8);
+
+    const ptHits = searchCraftCatalog('maquiagem vidro editorial glass skin', { category: 'makeup' });
+    assert.equal(ptHits[0].id, 'editorial-glass-skin');
+
+    const productCat = listCraftCatalog({ category: 'all', subjectType: 'product' });
+    assert.equal(productCat.makeup, undefined);
+    assert.ok(productCat.poses.every((p) => p.categories.includes('product')));
+
+    let fetchCalls = 0;
+    const mockFetch = async (url) => {
+      fetchCalls += 1;
+      if (url.includes('wikipedia.org')) {
+        return {
+          ok: true,
+          json: async () => ({
+            query: { search: [{ title: 'Anamorphic format', snippet: '<span>Widescreen</span> 2.39:1 cinema optics.' }] }
+          })
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          Heading: 'Black Pro-Mist',
+          AbstractText: 'Optical diffusion filter creating subtle highlight halation.',
+          AbstractURL: 'https://example.org/promist'
+        })
+      };
+    };
+
+    const r1 = await researchPhotographyTechniques({
+      query: 'cinema trailer anamorphic pro-mist',
+      studioHome: dir,
+      fetchImpl: mockFetch
+    });
+    assert.equal(r1.source, 'curated+live-web');
+    assert.equal(r1.cached, false);
+    assert.ok(r1.webReferences.length >= 2);
+    assert.equal(fetchCalls, 2);
+
+    const r2 = await researchPhotographyTechniques({
+      query: 'cinema trailer anamorphic pro-mist',
+      studioHome: dir,
+      fetchImpl: mockFetch
+    });
+    assert.equal(r2.source, 'curated+web-cache');
+    assert.equal(r2.cached, true);
+    assert.equal(fetchCalls, 2);
+
+    const warningStack = recommendCraftStack({
+      brief: 'tight beauty close-up headshot',
+      presetId: 'high-fashion-beauty',
+      craftOptions: { lensId: '24mm-f14-gm', poseId: 'contrapposto-editorial' },
+      locks: { keepPose: true }
+    });
+    assert.equal(warningStack.pose, null);
+    assert.ok(warningStack.warnings.some((w) => /keepPose=true/i.test(w)));
+    assert.ok(warningStack.warnings.some((w) => /distortion/i.test(w)));
+
+    const imgPath = path.join(dir, 'hero.png');
+    fs.writeFileSync(imgPath, makeFakePng(1200, 900));
+    const store = new StudioStore(path.join(dir, 'studio-home'));
+    const job = store.createJobFromFile({
+      imagePath: imgPath,
+      brief: 'Cinema trailer frame in rain with Cooke anamorphic and smudged kohl makeup',
+      autoRun: true
+    });
+    assert.equal(job.preset, 'cinema-trailer');
+    assert.equal(job.craftRecipe.lens.id, '40mm-cooke-anamorphic');
+    assert.match(job.promptPacks.midjourneyFluxPrompt, /--ar 21:9/);
+    assert.equal(job.promptPacks.universalJsonSpec.version, '4.0.0');
+
+    const composed = store.composeLook(job.id, {
+      preset: 'high-fashion-beauty',
+      poseId: 'turtle-jawline-power',
+      makeupId: 'editorial-glass-skin',
+      effectIds: ['black-pro-mist-1-8']
+    });
+    assert.equal(composed.preset, 'high-fashion-beauty');
+    assert.equal(composed.craftRecipe.pose.id, 'turtle-jawline-power');
+    assert.match(composed.promptPacks.codexPrompt, /Glass Skin|cheekbones/i);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('MCP server supports Content-Length framing, resources, prompts, and studio_compose_look', async () => {
+  const dir = makeTempDir();
+  try {
+    const imgPath = path.join(dir, 'model.png');
+    fs.writeFileSync(imgPath, makeFakePng(900, 1200));
+
+    const child = spawn(process.execPath, [path.resolve(__dirname, '../bin/mcp-server.cjs')], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, AI_PHOTO_STUDIO_HOME: path.join(dir, 'studio-home') }
+    });
+
+    const frame = (obj) => {
+      const json = JSON.stringify(obj);
+      return `Content-Length: ${Buffer.byteLength(json, 'utf8')}\r\n\r\n${json}`;
+    };
+
+    const responses = [];
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('MCP v4 framing test timeout')), 5000);
+      let buf = '';
+      child.stdout.on('data', (chunk) => {
+        buf += chunk.toString('utf8');
+        const lines = buf.split(/\r?\n/);
+        buf = lines.pop() || '';
+        for (const l of lines) {
+          if (!l.trim()) continue;
+          responses.push(JSON.parse(l));
+          if (responses.length === 5) {
+            clearTimeout(timer);
+            resolve();
+          }
+        }
+      });
+
+      child.stdin.write(frame({ jsonrpc: '2.0', id: 1, method: 'resources/list', params: {} }));
+      child.stdin.write(frame({ jsonrpc: '2.0', id: 2, method: 'resources/read', params: { uri: 'studio://catalog/makeup' } }));
+      child.stdin.write(frame({ jsonrpc: '2.0', id: 3, method: 'prompts/list', params: {} }));
+      child.stdin.write(frame({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'studio_research_craft', arguments: { query: 'jawline', liveWeb: false } } }));
+      child.stdin.write(frame({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'studio_compose_look', arguments: { brief: 'cinema trailer neon rain', preset: 'cinema-trailer' } } }));
+    });
+
+    child.kill();
+    const byId = (id) => responses.find((r) => r.id === id);
+    assert.ok(byId(1).result.resources.some((r) => r.uri === 'studio://catalog/poses'));
+    assert.match(byId(2).result.contents[0].text, /editorial-glass-skin/);
+    assert.equal(byId(3).result.prompts.length, 3);
+    const researchOut = JSON.parse(byId(4).result.content[0].text);
+    assert.equal(researchOut.curatedMatches[0].id, 'turtle-jawline-power');
+    const lookOut = JSON.parse(byId(5).result.content[0].text);
+    assert.equal(lookOut.craftRecipe.camera.id, 'arri-alexa35-vision3');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

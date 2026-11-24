@@ -2,6 +2,7 @@
 'use strict';
 
 const { getCrewList, STUDIO_PRESETS } = require('../lib/crew.cjs');
+const { listCraftCatalog, researchPhotographyTechniques } = require('../lib/craft-research.cjs');
 const { StudioStore, defaultStudioHome } = require('../lib/store.cjs');
 const { createStudioWebServer } = require('../lib/studio-web.cjs');
 const { installStudioClients, checkStudioStatus } = require('../lib/installers.cjs');
@@ -24,7 +25,16 @@ function parseArgs(argv) {
     keepPose: false,
     keepWardrobe: false,
     keepBackground: false,
-    keepFraming: false
+    keepFraming: false,
+    pose: null,
+    camera: null,
+    lens: null,
+    effects: [],
+    makeup: null,
+    lighting: null,
+    research: null,
+    category: 'all',
+    offline: false
   };
   for (let i = 0; i < rest.length; i += 1) {
     const a = rest[i];
@@ -35,6 +45,15 @@ function parseArgs(argv) {
     else if (a === '--preset' && rest[i + 1]) opts.preset = rest[++i];
     else if (a === '--subject' && rest[i + 1]) opts.subject = rest[++i];
     else if (a === '--count' && rest[i + 1]) opts.count = Number(rest[++i]) || 5;
+    else if (a === '--pose' && rest[i + 1]) opts.pose = rest[++i];
+    else if (a === '--camera' && rest[i + 1]) opts.camera = rest[++i];
+    else if (a === '--lens' && rest[i + 1]) opts.lens = rest[++i];
+    else if (a === '--effect' && rest[i + 1]) opts.effects = rest[++i].split(',').map((s) => s.trim()).filter(Boolean);
+    else if (a === '--makeup' && rest[i + 1]) opts.makeup = rest[++i];
+    else if (a === '--lighting' && rest[i + 1]) opts.lighting = rest[++i];
+    else if (a === '--research' && rest[i + 1]) opts.research = rest[++i];
+    else if (a === '--category' && rest[i + 1]) opts.category = rest[++i];
+    else if (a === '--offline') opts.offline = true;
     else if (a === '--analyze') opts.analyze = true;
     else if (a === '--keep-pose') opts.keepPose = true;
     else if (a === '--keep-wardrobe') opts.keepWardrobe = true;
@@ -46,6 +65,18 @@ function parseArgs(argv) {
   return opts;
 }
 
+function buildCraftOptions(opts) {
+  const out = {};
+  if (opts.pose) out.poseId = opts.pose;
+  if (opts.camera) out.cameraId = opts.camera;
+  if (opts.lens) out.lensId = opts.lens;
+  if (opts.effects && opts.effects.length) out.effectIds = opts.effects;
+  if (opts.makeup) out.makeupId = opts.makeup;
+  if (opts.lighting) out.lightingId = opts.lighting;
+  if (opts.research) out.researchQuery = opts.research;
+  return Object.keys(out).length ? out : null;
+}
+
 function printUsage() {
   console.log([
     'Usage: ai-photo-studio <command> [options]',
@@ -54,6 +85,8 @@ function printUsage() {
     '  auto <imagePath>     Run 8-agent Autonomous Mode (auto-crops tall screenshots, proposes 3 concepts)',
     '  direct <imagePath>   Run 8-agent Directed Mode following --brief and optional --scope / --keep-* locks',
     '  essay <imagePath>    Plan & compile a cohesive multi-shot Photo Essay (2-6 frames, default 5)',
+    '  research <query>     Research poses, cameras, lenses, optical effects, makeup, and cinema trailer styles',
+    '  catalog [category]   List curated craft items (poses|cameras|lenses|effects|makeup|lighting|presets)',
     '  web                  Start Local Web Studio Workbench (default port 4321)',
     '  mcp                  Start stdio MCP Server',
     '  crew                 Print the 8 specialist crew roles',
@@ -66,8 +99,16 @@ function printUsage() {
     '  --analyze            Run optional BYOK vision analysis (GEMINI_API_KEY / OPENAI_API_KEY) before compiling',
     '  --brief "..."        Exact art direction order for direct or essay mode',
     '  --scope <scope>      subtle-retouch | targeted-edit | full-editorial',
-    '  --preset <id>        Preset override',
+    '  --preset <id>        Preset override (incl. cinema-trailer, high-fashion-beauty, street-flash-editorial)',
     '  --subject <type>     auto | portrait | couple | product | night | outdoor | executive',
+    '  --pose <id>          Pose ID from craft catalog',
+    '  --camera <id>        Camera/emulsion ID from craft catalog',
+    '  --lens <id>          Lens ID from craft catalog',
+    '  --effect <id,...>    Comma-separated optical filter/effect IDs',
+    '  --makeup <id>        Makeup/grooming ID from craft catalog',
+    '  --lighting <id>      Lighting rig ID from craft catalog',
+    '  --research "<q>"     Enrich direction with live photography research',
+    '  --offline            Disable live web lookup during research',
     '  --keep-pose          Lock original pose & expression',
     '  --keep-wardrobe      Lock original clothing & accessories',
     '  --keep-background    Lock original background',
@@ -116,12 +157,41 @@ async function main() {
     return;
   }
 
+  if (opts.cmd === 'catalog') {
+    const cat = opts.positional[0] || opts.category || 'all';
+    if (cat === 'presets') {
+      console.log(JSON.stringify({ presets: Object.values(STUDIO_PRESETS) }, null, 2));
+      return;
+    }
+    const data = listCraftCatalog({ category: cat, subjectType: opts.subject === 'auto' ? null : opts.subject });
+    console.log(JSON.stringify(cat === 'all' ? { ...data, presets: Object.values(STUDIO_PRESETS) } : data, null, 2));
+    return;
+  }
+
+  if (opts.cmd === 'research') {
+    const query = opts.positional.join(' ').trim() || opts.research || opts.brief;
+    const store = new StudioStore(defaultStudioHome());
+    const result = await researchPhotographyTechniques({
+      query,
+      category: opts.category || 'all',
+      subjectType: opts.subject === 'auto' ? null : opts.subject,
+      liveWeb: !opts.offline,
+      studioHome: store.studioHome
+    });
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
   if (opts.cmd === 'auto') {
     const imagePath = opts.positional[0];
     if (!imagePath) throw new Error('Missing <imagePath>. Usage: ai-photo-studio auto <imagePath>');
     const store = new StudioStore(defaultStudioHome());
-    const created = store.createJobFromFile({ imagePath, mode: 'autonomous', subjectHint: opts.subject });
-    let job = store.runAutonomous(created.id, { subjectHint: opts.subject });
+    const craftOptions = buildCraftOptions(opts);
+    const researchInsights = opts.research
+      ? await researchPhotographyTechniques({ query: opts.research, liveWeb: !opts.offline, studioHome: store.studioHome })
+      : null;
+    const created = store.createJobFromFile({ imagePath, mode: 'autonomous', subjectHint: opts.subject, craftOptions });
+    let job = store.runAutonomous(created.id, { subjectHint: opts.subject, craftOptions, researchInsights });
     job = await maybeAnalyze(store, job, opts.analyze);
     if (opts.json) {
       console.log(JSON.stringify(job, null, 2));
@@ -140,6 +210,10 @@ async function main() {
     if (!imagePath) throw new Error('Missing <imagePath>. Usage: ai-photo-studio direct <imagePath> --brief "..."');
     if (!opts.brief) throw new Error('Missing --brief "...". Directed mode requires an art direction order.');
     const store = new StudioStore(defaultStudioHome());
+    const craftOptions = buildCraftOptions(opts);
+    const researchInsights = opts.research
+      ? await researchPhotographyTechniques({ query: opts.research, liveWeb: !opts.offline, studioHome: store.studioHome })
+      : null;
     const locks = {
       keepPose: opts.keepPose,
       keepWardrobe: opts.keepWardrobe,
@@ -153,14 +227,17 @@ async function main() {
       scope: opts.scope,
       preset: opts.preset,
       locks,
-      subjectHint: opts.subject
+      subjectHint: opts.subject,
+      craftOptions
     });
     let job = store.runDirected(created.id, {
       brief: opts.brief,
       scope: opts.scope,
       preset: opts.preset,
       locks,
-      subjectHint: opts.subject
+      subjectHint: opts.subject,
+      craftOptions,
+      researchInsights
     });
     job = await maybeAnalyze(store, job, opts.analyze);
     if (opts.json) {
@@ -176,16 +253,23 @@ async function main() {
     const imagePath = opts.positional[0];
     if (!imagePath) throw new Error('Missing <imagePath>. Usage: ai-photo-studio essay <imagePath> [--count 5]');
     const store = new StudioStore(defaultStudioHome());
+    const craftOptions = buildCraftOptions(opts);
+    const researchInsights = opts.research
+      ? await researchPhotographyTechniques({ query: opts.research, liveWeb: !opts.offline, studioHome: store.studioHome })
+      : null;
     const created = store.createJobFromFile({
       imagePath,
       mode: 'directed',
       brief: opts.brief,
-      subjectHint: opts.subject
+      subjectHint: opts.subject,
+      craftOptions
     });
     let job = store.runEssay(created.id, {
       count: opts.count,
       subjectHint: opts.subject,
       brief: opts.brief,
+      craftOptions,
+      researchInsights,
       locks: { keepWardrobe: !opts.brief || opts.keepWardrobe }
     });
     job = await maybeAnalyze(store, job, opts.analyze);

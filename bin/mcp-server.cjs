@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 'use strict';
 
-const readline = require('node:readline');
+const fs = require('node:fs');
+const path = require('node:path');
 const { getCrewList, STUDIO_PRESETS } = require('../lib/crew.cjs');
+const { CRAFT_CATALOG } = require('../lib/craft-library.cjs');
+const { listCraftCatalog, researchPhotographyTechniques } = require('../lib/craft-research.cjs');
+const { recommendCraftStack } = require('../lib/craft-planner.cjs');
 const { StudioStore, defaultStudioHome } = require('../lib/store.cjs');
 const { createStudioWebServer } = require('../lib/studio-web.cjs');
 const {
@@ -34,6 +38,19 @@ const ROLE_ENUM = [
 
 const SCOPE_ENUM = ['subtle-retouch', 'targeted-edit', 'full-editorial'];
 const SUBJECT_ENUM = ['auto', 'portrait', 'couple', 'product', 'night', 'outdoor', 'executive'];
+const CRAFT_OPTIONS_SCHEMA = {
+  type: 'object',
+  properties: {
+    poseId: { type: 'string', description: 'Catalog pose ID (e.g. contrapposto-editorial, turtle-jawline-power, over-shoulder-cinema).' },
+    cameraId: { type: 'string', description: 'Catalog camera/film ID (e.g. hasselblad-x2d-portra400, arri-alexa35-vision3).' },
+    lensId: { type: 'string', description: 'Catalog lens ID (e.g. 85mm-f14-gm, 40mm-cooke-anamorphic, 105mm-f14-sigma).' },
+    effectIds: { type: 'array', items: { type: 'string' }, description: 'Optical filter/effect IDs (e.g. black-pro-mist-1-4, teal-amber-trailer-grade).' },
+    makeupId: { type: 'string', description: 'Catalog makeup/grooming ID (e.g. editorial-glass-skin, deconstructed-cinema-kohl).' },
+    lightingId: { type: 'string', description: 'Catalog lighting setup ID (e.g. rembrandt-45-negfill, butterfly-paramount-beauty).' },
+    researchQuery: { type: 'string', description: 'Optional live photography research query to enrich direction.' }
+  },
+  additionalProperties: false
+};
 
 const TOOLS = [
   {
@@ -64,6 +81,7 @@ const TOOLS = [
           },
           additionalProperties: false
         },
+        craftOptions: CRAFT_OPTIONS_SCHEMA,
         autoRun: { type: 'boolean', description: 'Run all 8 specialists immediately.' }
       },
       additionalProperties: false
@@ -80,7 +98,8 @@ const TOOLS = [
         subjectHint: { type: 'string', enum: SUBJECT_ENUM },
         proposalId: { type: 'string' },
         essenceAnalysis: { type: 'string', description: 'Essence & visual subtext extracted from the photo.' },
-        customProposals: { type: 'array', items: { type: 'object' }, description: '3 bespoke creative directions derived from photo essence.' }
+        customProposals: { type: 'array', items: { type: 'object' }, description: '3 bespoke creative directions derived from photo essence.' },
+        craftOptions: CRAFT_OPTIONS_SCHEMA
       },
       additionalProperties: false
     }
@@ -106,7 +125,8 @@ const TOOLS = [
             keepFraming: { type: 'boolean' }
           },
           additionalProperties: false
-        }
+        },
+        craftOptions: CRAFT_OPTIONS_SCHEMA
       },
       additionalProperties: false
     }
@@ -124,7 +144,8 @@ const TOOLS = [
         brief: { type: 'string' },
         keepWardrobe: { type: 'boolean' },
         essenceAnalysis: { type: 'string', description: 'Essence & visual subtext extracted from the anchor photo.' },
-        customFrames: { type: 'array', items: { type: 'object' }, description: 'Bespoke storyboard frames derived from the photo essence.' }
+        customFrames: { type: 'array', items: { type: 'object' }, description: 'Bespoke storyboard frames derived from the photo essence.' },
+        craftOptions: CRAFT_OPTIONS_SCHEMA
       },
       additionalProperties: false
     }
@@ -258,6 +279,49 @@ const TOOLS = [
       properties: { port: { type: 'integer', description: 'Port on 127.0.0.1 (default 4321).' } },
       additionalProperties: false
     }
+  },
+  {
+    name: 'studio_research_craft',
+    description: 'Research photography & cinematography techniques (poses, cameras, lenses, optical filters, makeup, trailer looks) combining curated studio encyclopedia + optional live web lookup.',
+    inputSchema: {
+      type: 'object',
+      required: ['query'],
+      properties: {
+        query: { type: 'string', description: 'Search query in PT-BR or EN (e.g. "cinema trailer anamorphic", "jawline posing", "black pro-mist", "editorial glass skin").' },
+        category: { type: 'string', enum: ['all', 'poses', 'cameras', 'lenses', 'effects', 'makeup', 'lighting'] },
+        subjectType: { type: 'string', enum: ['portrait', 'couple', 'product', 'night', 'outdoor', 'executive'] },
+        liveWeb: { type: 'boolean', description: 'Query public web references with local 24h cache (default true).' },
+        limit: { type: 'integer' }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'studio_list_craft_catalog',
+    description: 'Browse the full curated catalog of poses, cameras/emulsions, lenses, optical effects, makeup finishes, lighting rigs, and presets.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        category: { type: 'string', enum: ['all', 'poses', 'cameras', 'lenses', 'effects', 'makeup', 'lighting', 'presets'] },
+        subjectType: { type: 'string', enum: ['portrait', 'couple', 'product', 'night', 'outdoor', 'executive'] }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'studio_compose_look',
+    description: 'Recommend or apply a complete look recipe (pose, camera, lens, optical effects, makeup, lighting) with optical conflict warnings, optionally updating a job and recompiling prompts.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        jobId: { type: 'string', description: 'Optional existing job ID to update and recompile.' },
+        brief: { type: 'string', description: 'Desired mood/goal (e.g. "cinema trailer rain noir", "editorial beauty glass skin").' },
+        subjectType: { type: 'string', enum: ['portrait', 'couple', 'product', 'night', 'outdoor', 'executive'] },
+        preset: { type: 'string', enum: Object.keys(STUDIO_PRESETS) },
+        craftOptions: CRAFT_OPTIONS_SCHEMA
+      },
+      additionalProperties: false
+    }
   }
 ];
 
@@ -289,6 +353,7 @@ async function handleToolCall(name, args = {}) {
           brief: args.brief,
           subjectHint: args.subjectHint,
           locks: args.locks,
+          craftOptions: args.craftOptions,
           autoRun: Boolean(args.autoRun)
         })
       };
@@ -296,15 +361,20 @@ async function handleToolCall(name, args = {}) {
       let jobId = args.jobId;
       if (!jobId) {
         if (!args.imagePath) throw new Error('Provide either jobId or imagePath.');
-        const created = store.createJobFromFile({ imagePath: args.imagePath, mode: 'autonomous' });
+        const created = store.createJobFromFile({ imagePath: args.imagePath, mode: 'autonomous', craftOptions: args.craftOptions });
         jobId = created.id;
       }
+      const researchInsights = args.craftOptions?.researchQuery
+        ? await researchPhotographyTechniques({ query: args.craftOptions.researchQuery, studioHome: store.studioHome })
+        : null;
       return {
         job: store.runAutonomous(jobId, {
           subjectHint: args.subjectHint,
           proposalId: args.proposalId,
           essenceAnalysis: args.essenceAnalysis,
-          customProposals: args.customProposals
+          customProposals: args.customProposals,
+          craftOptions: args.craftOptions,
+          researchInsights
         })
       };
     }
@@ -318,16 +388,22 @@ async function handleToolCall(name, args = {}) {
           brief: args.brief,
           scope: args.scope,
           preset: args.preset,
-          locks: args.locks
+          locks: args.locks,
+          craftOptions: args.craftOptions
         });
         jobId = created.id;
       }
+      const researchInsights = args.craftOptions?.researchQuery
+        ? await researchPhotographyTechniques({ query: args.craftOptions.researchQuery, studioHome: store.studioHome })
+        : null;
       return {
         job: store.runDirected(jobId, {
           brief: args.brief,
           scope: args.scope,
           preset: args.preset,
-          locks: args.locks
+          locks: args.locks,
+          craftOptions: args.craftOptions,
+          researchInsights
         })
       };
     }
@@ -335,7 +411,7 @@ async function handleToolCall(name, args = {}) {
       let jobId = args.jobId;
       if (!jobId) {
         if (!args.imagePath) throw new Error('Provide either jobId or imagePath.');
-        const created = store.createJobFromFile({ imagePath: args.imagePath, mode: 'directed', brief: args.brief || '' });
+        const created = store.createJobFromFile({ imagePath: args.imagePath, mode: 'directed', brief: args.brief || '', craftOptions: args.craftOptions });
         jobId = created.id;
       }
       return {
@@ -345,6 +421,7 @@ async function handleToolCall(name, args = {}) {
           brief: args.brief,
           essenceAnalysis: args.essenceAnalysis,
           customFrames: args.customFrames,
+          craftOptions: args.craftOptions,
           locks: { keepWardrobe: args.keepWardrobe !== false }
         })
       };
@@ -414,10 +491,99 @@ async function handleToolCall(name, args = {}) {
       }
       return { ok: true, ...webInfo };
     }
+    case 'studio_research_craft':
+      return researchPhotographyTechniques({
+        query: args.query,
+        category: args.category || 'all',
+        subjectType: args.subjectType || null,
+        liveWeb: args.liveWeb !== false,
+        limit: args.limit || 6,
+        studioHome: store.studioHome
+      });
+    case 'studio_list_craft_catalog': {
+      if (args.category === 'presets') {
+        return { presets: Object.values(STUDIO_PRESETS) };
+      }
+      const catalog = listCraftCatalog({
+        category: args.category || 'all',
+        subjectType: args.subjectType || null
+      });
+      return args.category && args.category !== 'all'
+        ? catalog
+        : { ...catalog, presets: Object.values(STUDIO_PRESETS) };
+    }
+    case 'studio_compose_look': {
+      const researchInsights = args.craftOptions?.researchQuery
+        ? await researchPhotographyTechniques({
+            query: args.craftOptions.researchQuery,
+            subjectType: args.subjectType || null,
+            studioHome: store.studioHome
+          })
+        : null;
+      if (args.jobId) {
+        const job = store.composeLook(args.jobId, { ...(args.craftOptions || {}), preset: args.preset }, researchInsights);
+        return { job, craftRecipe: job.craftRecipe, promptPacks: job.promptPacks };
+      }
+      const recipe = recommendCraftStack({
+        brief: args.brief || '',
+        subjectType: args.subjectType || 'portrait',
+        presetId: args.preset || 'editorial-portrait',
+        craftOptions: args.craftOptions || {},
+        researchInsights
+      });
+      return { craftRecipe: recipe };
+    }
     default:
       throw Object.assign(new Error(`Unknown tool: ${name}`), { code: -32601 });
   }
 }
+
+const STUDIO_RESOURCES = [
+  ...Object.keys(CRAFT_CATALOG).map((cat) => ({
+    uri: `studio://catalog/${cat}`,
+    name: `Craft Catalog: ${cat}`,
+    description: `Curated photography & cinematography ${cat} specifications and prompt snippets.`,
+    mimeType: 'application/json'
+  })),
+  {
+    uri: 'studio://catalog/presets',
+    name: 'Studio Presets',
+    description: 'All 10 studio production presets including cinema-trailer and high-fashion-beauty.',
+    mimeType: 'application/json'
+  },
+  {
+    uri: 'studio://playbook',
+    name: 'Studio Crew Playbook',
+    description: 'Master cinematography, lighting ratios, negative fill, posing, and Anti-AI QA standards.',
+    mimeType: 'text/markdown'
+  }
+];
+
+const STUDIO_PROMPTS = [
+  {
+    name: 'cinema-trailer-shoot',
+    description: 'Direct an anamorphic 2.39:1 movie-trailer grade transformation preserving identity.',
+    arguments: [
+      { name: 'imagePath', description: 'Absolute path to anchor photo', required: true },
+      { name: 'mood', description: 'Optional scene mood (e.g. rainy neon noir, golden dusk)', required: false }
+    ]
+  },
+  {
+    name: 'editorial-beauty-shoot',
+    description: 'Direct a Hasselblad 105mm beauty portrait with authentic pore-level skin & editorial makeup.',
+    arguments: [
+      { name: 'imagePath', description: 'Absolute path to anchor photo', required: true },
+      { name: 'makeupStyle', description: 'Optional makeup style (glass skin, smudged kohl, velvet matte lip)', required: false }
+    ]
+  },
+  {
+    name: 'autonomous-essence-shoot',
+    description: 'Analyze anchor photo essence first and produce 3 bespoke non-cliché proposals.',
+    arguments: [
+      { name: 'imagePath', description: 'Absolute path to anchor photo', required: true }
+    ]
+  }
+];
 
 async function handleMessage(msg) {
   if (!msg || typeof msg !== 'object') return;
@@ -425,12 +591,49 @@ async function handleMessage(msg) {
     return respond(msg.id, {
       protocolVersion: '2024-11-05',
       serverInfo: { name: 'ai-photo-studio', version: require('../package.json').version },
-      capabilities: { tools: {} }
+      capabilities: { tools: {}, resources: {}, prompts: {} }
     });
   }
   if (msg.method === 'notifications/initialized') return;
   if (msg.method === 'tools/list') {
     return respond(msg.id, { tools: TOOLS });
+  }
+  if (msg.method === 'resources/list') {
+    return respond(msg.id, { resources: STUDIO_RESOURCES });
+  }
+  if (msg.method === 'resources/read') {
+    const uri = String(msg.params?.uri || '');
+    if (uri === 'studio://playbook') {
+      const playbookPath = path.resolve(__dirname, '..', 'skill', 'references', 'crew-playbook.md');
+      const text = fs.existsSync(playbookPath) ? fs.readFileSync(playbookPath, 'utf8') : '';
+      return respond(msg.id, { contents: [{ uri, mimeType: 'text/markdown', text }] });
+    }
+    if (uri === 'studio://catalog/presets') {
+      return respond(msg.id, { contents: [{ uri, mimeType: 'application/json', text: JSON.stringify(STUDIO_PRESETS, null, 2) }] });
+    }
+    const catMatch = uri.match(/^studio:\/\/catalog\/([a-z]+)$/);
+    if (catMatch && CRAFT_CATALOG[catMatch[1]]) {
+      return respond(msg.id, { contents: [{ uri, mimeType: 'application/json', text: JSON.stringify(CRAFT_CATALOG[catMatch[1]], null, 2) }] });
+    }
+    return respondError(msg.id, -32602, `Unknown resource URI: ${uri}`);
+  }
+  if (msg.method === 'prompts/list') {
+    return respond(msg.id, { prompts: STUDIO_PROMPTS });
+  }
+  if (msg.method === 'prompts/get') {
+    const pName = String(msg.params?.name || '');
+    const pArgs = msg.params?.arguments || {};
+    const promptDef = STUDIO_PROMPTS.find((p) => p.name === pName);
+    if (!promptDef) return respondError(msg.id, -32602, `Unknown prompt: ${pName}`);
+    const instructions = pName === 'cinema-trailer-shoot'
+      ? `Run studio_research_craft for "cinema trailer anamorphic ${pArgs.mood || ''}", then call studio_run_directed with imagePath="${pArgs.imagePath || '<path>'}" and preset="cinema-trailer".`
+      : pName === 'editorial-beauty-shoot'
+        ? `Run studio_research_craft for "editorial beauty makeup ${pArgs.makeupStyle || ''}", then call studio_run_directed with imagePath="${pArgs.imagePath || '<path>'}" and preset="high-fashion-beauty".`
+        : `Inspect imagePath="${pArgs.imagePath || '<path>'}" visually, extract essenceAnalysis + 3 bespoke proposals, and call studio_run_autonomous.`;
+    return respond(msg.id, {
+      description: promptDef.description,
+      messages: [{ role: 'user', content: { type: 'text', text: instructions } }]
+    });
   }
   if (msg.method === 'tools/call') {
     const { name, arguments: args = {} } = msg.params || {};
@@ -455,17 +658,38 @@ async function handleMessage(msg) {
 }
 
 if (require.main === module) {
-  const rl = readline.createInterface({ input: process.stdin });
-  rl.on('line', (line) => {
+  let buffer = Buffer.alloc(0);
+  const processLine = (line) => {
     const trimmed = line.trim();
-    if (!trimmed) return;
+    if (!trimmed || /^content-length:/i.test(trimmed)) return;
     try {
       const msg = JSON.parse(trimmed);
       handleMessage(msg).catch((err) => {
         if (msg && msg.id !== undefined) respondError(msg.id, -32603, err.message);
       });
     } catch {}
+  };
+
+  process.stdin.on('data', (chunk) => {
+    buffer = Buffer.concat([buffer, chunk]);
+    while (buffer.length > 0) {
+      const headerMatch = buffer.toString('utf8', 0, Math.min(buffer.length, 256)).match(/^Content-Length:\s*(\d+)\r?\n\r?\n/i);
+      if (headerMatch) {
+        const headerBytes = Buffer.byteLength(headerMatch[0], 'utf8');
+        const bodyLen = Number(headerMatch[1]);
+        if (buffer.length < headerBytes + bodyLen) break;
+        const body = buffer.slice(headerBytes, headerBytes + bodyLen).toString('utf8');
+        buffer = buffer.slice(headerBytes + bodyLen);
+        processLine(body);
+        continue;
+      }
+      const nlIdx = buffer.indexOf(0x0a);
+      if (nlIdx === -1) break;
+      const line = buffer.slice(0, nlIdx).toString('utf8');
+      buffer = buffer.slice(nlIdx + 1);
+      processLine(line);
+    }
   });
 }
 
-module.exports = { TOOLS, handleMessage, handleToolCall };
+module.exports = { TOOLS, STUDIO_RESOURCES, STUDIO_PROMPTS, handleMessage, handleToolCall };
