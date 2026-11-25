@@ -38,6 +38,66 @@ test('magic bytes reject disguised extensions and derive actual MIME from conten
   assert.throws(() => store.createJobFromBuffer({ fileName: 'fake.jpg', buffer: Buffer.from('not JPEG') }), /file signature/);
   fs.writeFileSync(file, png()); assert.equal(inspectImageFile(file).mimeType, 'image/png');
 });
+test('structural signatures reject malformed PNG, JPEG and WebP headers', t => {
+  const store = fixture(t); const file = path.join(store.studioHome, 'payload.png');
+  const badChunk = png(); badChunk.write('XXXX', 12);
+  const zeroSize = png(); zeroSize.writeUInt32BE(0, 16);
+  const webp = Buffer.alloc(30); webp.write('RIFF'); webp.writeUInt32LE(22, 4); webp.write('WEBPFAKE', 8);
+  for (const buffer of [badChunk, zeroSize, Buffer.concat([Buffer.from([255, 216]), Buffer.from('<html>payload</html>')]), webp]) {
+    fs.writeFileSync(file, buffer); assert.throws(() => inspectImageFile(file), /file signature/);
+  }
+  // Minimal supported lossless WebP header is 25 bytes; it need not be VP8X-sized.
+  const lossless = Buffer.alloc(25); lossless.write('RIFF'); lossless.writeUInt32LE(17, 4); lossless.write('WEBPVP8L', 8); lossless.writeUInt32LE(5, 16); lossless[20] = 0x2f;
+  fs.writeFileSync(file, lossless); assert.equal(inspectImageFile(file).format, 'webp');
+  const extended = Buffer.alloc(30); extended.write('RIFF'); extended.writeUInt32LE(22, 4); extended.write('WEBPVP8X', 8); extended.writeUInt32LE(10, 16);
+  fs.writeFileSync(file, extended); assert.equal(inspectImageFile(file).width, 1);
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xc0, 0, 11, 8, 0, 1, 0, 1, 1, 1, 0x11, 0]);
+  fs.writeFileSync(file, jpeg); assert.equal(inspectImageFile(file).format, 'jpeg');
+  fs.writeFileSync(file, jpeg.subarray(0, 10)); assert.throws(() => inspectImageFile(file), /file signature/);
+});
+test('canonical asset names follow verified bytes and new render becomes active after rollback', t => {
+  const store = fixture(t); let job = store.createJobFromBuffer({ fileName: 'evil.html', buffer: png() });
+  assert.equal(job.sourceImage.assetName, 'anchor.png');
+  job = store.registerRenderFromBuffer(job.id, { fileName: 'evil.html:stream', buffer: png() });
+  assert.equal(job.renders[0].assetName, 'render_v1.png');
+  store.registerRenderFromBuffer(job.id, { fileName: 'render.png', buffer: png() }); store.rollbackToRender(job.id, 1);
+  job = store.registerRenderFromBuffer(job.id, { fileName: 'render.webp', buffer: png() });
+  assert.equal(job.activeRenderVersion, 3); assert.equal(store.submitQa(job.id, {}).qaScorecards.at(-1).renderVersion, 3);
+  const source = path.join(store.studioHome, 'source.html'); fs.writeFileSync(source, png());
+  assert.equal(store.createJobFromFile({ imagePath: source }).sourceImage.assetName, 'anchor.png');
+  job = store.registerRenderFromFile(job.id, source); assert.equal(job.renders.at(-1).assetName, 'render_v4.png'); assert.equal(job.activeRenderVersion, 4);
+});
+test('craft allowlist blocks prototype keys and effects reset removes legacy and derived data', t => {
+  const hostile = JSON.parse('{"effectIds":[],"__proto__":{"isAdmin":true},"arbitraryKey":"x"}');
+  const merged = mergeCraftOptions({ effectId: 'mist' }, hostile);
+  assert.deepEqual(merged, {}); assert.equal(merged.isAdmin, undefined); assert.equal({}.isAdmin, undefined);
+  assert.deepEqual(mergeCraftOptions({}, { effectIds: [' mist ', 'mist', ''], cameraId: ' camera ' }), { effectIds: ['mist'], cameraId: 'camera' });
+  assert.throws(() => mergeCraftOptions({}, { effectIds: [{}] }), /Invalid craft option/);
+  const store = fixture(t); let job = store.createJobFromBuffer({ fileName: 'a.png', buffer: png(), brief: 'portrait', autoRun: true });
+  job.craftOptions.effectId = 'mist'; job.crewPasses['camera-optics'].opticalCharacter = 'STALE_EFFECT_CHARACTER'; store.writeJob(job);
+  job = store.composeLook(job.id, { effectIds: [] }); assert.equal(job.craftOptions.effectId, undefined); assert.notEqual(job.crewPasses['camera-optics'].opticalCharacter, 'STALE_EFFECT_CHARACTER');
+  assert.doesNotThrow(() => store.composeLook(job.id, JSON.parse('{"__proto__":null,"constructor":null}')));
+});
+test('HTTP strict environment, media type and fetch-site-only metadata cannot bypass token enforcement', async t => {
+  const store = fixture(t); const original = process.env.AI_PHOTO_STUDIO_REQUIRE_TOKEN;
+  let web;
+  try { process.env.AI_PHOTO_STUDIO_REQUIRE_TOKEN = '1'; web = createStudioWebServer({ store, port: 0 }); }
+  finally { if (original === undefined) delete process.env.AI_PHOTO_STUDIO_REQUIRE_TOKEN; else process.env.AI_PHOTO_STUDIO_REQUIRE_TOKEN = original; }
+  const info = await web.listen(); t.after(() => web.close());
+  assert.equal((await request(info.port, '/api/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status, 403);
+  const normal = await webFixture(t);
+  for (const method of ['POST', 'PUT', 'DELETE', 'PATCH']) {
+    assert.equal((await request(normal.port, '/api/jobs', { method, headers: { 'content-type': 'application/json-evil' }, body: '{}' })).status, 415);
+    assert.equal((await request(normal.port, '/api/jobs', { method, headers: { 'content-type': 'application/json', 'sec-fetch-site': 'same-origin' }, body: '{}' })).status, 403);
+  }
+  assert.equal((await request(normal.port, '/api/jobs')).headers['content-security-policy'], "default-src 'none'; frame-ancestors 'none'");
+  // Historical assets with an untrusted extension are served by verified content as well.
+  const job = normal.store.createJobFromBuffer({ fileName: 'a.png', buffer: png() });
+  fs.writeFileSync(path.join(normal.store.jobDir(job.id), 'assets', 'historical.html'), png());
+  const asset = await request(normal.port, `/api/jobs/${job.id}/assets/historical.html`);
+  assert.equal(asset.headers['content-type'], 'image/png');
+  assert.equal(asset.headers['content-security-policy'], "default-src 'none'; frame-ancestors 'none'");
+});
 test('HTTP guards enforce loopback Host, JSON, Origin, fetch metadata and browser tokens', async t => {
   const { port, sessionToken, store } = await webFixture(t);
   const post = headers => request(port, '/api/jobs', { method: 'POST', headers, body: '{}' });
@@ -135,6 +195,8 @@ test('CLI rejects unknown and incomplete flags and preserves help aliases', () =
     const r = spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8' }); assert.equal(r.status, 1); assert.match(r.stderr, /Unknown option: --foo|Missing value for option: --brief/);
   }
   for (const args of [['--help'], ['-h'], ['auto', '--help']]) { const r = spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8' }); assert.equal(r.status, 0); assert.match(r.stdout, /Usage:/); }
+  for (const port of ['abc', '-1', '0', '65536', '1.5']) { const r = spawnSync(process.execPath, [cli, 'crew', '--port', port], { encoding: 'utf8' }); assert.equal(r.status, 1); assert.match(r.stderr, /Invalid --port/); }
+  const missing = spawnSync(process.execPath, [cli, 'direct', '--brief', '-h'], { encoding: 'utf8' }); assert.equal(missing.status, 1); assert.match(missing.stderr, /Missing value/);
 });
 test('CLI analyzes intake before a single pipeline in auto, direct and essay, preserving every option', async t => {
   const store = fixture(t); const image = path.join(store.studioHome, 'anchor.png'); fs.writeFileSync(image, png());

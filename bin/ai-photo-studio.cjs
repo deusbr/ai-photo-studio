@@ -40,8 +40,11 @@ function parseArgs(argv) {
   for (let i = 0; i < rest.length; i += 1) {
     const a = rest[i];
     const valueFlags = ['--port', '--clients', '--brief', '--scope', '--preset', '--subject', '--count', '--pose', '--camera', '--lens', '--effect', '--makeup', '--lighting', '--research', '--category'];
-    if (valueFlags.includes(a) && (!rest[i + 1] || rest[i + 1].startsWith('--'))) throw new Error('Missing value for option: ' + a);
-    if (a === '--port' && rest[i + 1]) opts.port = Number(rest[++i]) || 4321;
+    if (valueFlags.includes(a) && (!rest[i + 1] || (rest[i + 1].startsWith('--') || rest[i + 1] === '-h'))) throw new Error('Missing value for option: ' + a);
+    if (a === '--port') {
+      opts.port = Number(rest[++i]);
+      if (!Number.isInteger(opts.port) || opts.port < 1 || opts.port > 65535) throw new Error('Invalid --port: expected an integer from 1 to 65535.');
+    }
     else if (a === '--clients' && rest[i + 1]) opts.clients = rest[++i].split(',').map((s) => s.trim()).filter(Boolean);
     else if (a === '--brief' && rest[i + 1]) opts.brief = rest[++i];
     else if (a === '--scope' && rest[i + 1]) opts.scope = rest[++i];
