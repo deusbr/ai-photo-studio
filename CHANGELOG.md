@@ -2,10 +2,10 @@
 
 All notable changes to `ai-photo-studio` are documented in this file.
 
-## [Unreleased — Trilha Rápida P1+P2+P4] - 2026-11-25
+## [4.1.0] - 2026-11-25
 
 ### Security & Hardening (P1)
-- **Local Web Studio (`lib/studio-web.cjs`):** Added loopback `Host` validation (anti-DNS rebinding), `Origin`/`Sec-Fetch-Site` enforcement, strict `application/json` media-type checks (`415`), per-session constant-time `X-Studio-Token` CSRF defense (with `AI_PHOTO_STUDIO_REQUIRE_TOKEN` strict mode), rotating per-response CSP nonces on HTML, and default-deny CSP + security headers on API/assets.
+- **Local Web Studio (`lib/studio-web.cjs`):** Added loopback `Host` validation (anti-DNS rebinding), `Origin`/`Sec-Fetch-Site` enforcement, strict `application/json` media-type checks (`415`), per-session constant-time `X-Studio-Token` CSRF defense (with `AI_PHOTO_STUDIO_REQUIRE_TOKEN` strict mode), rotating per-response CSP nonces on HTML, default-deny CSP + security headers on API/assets, and safe small-body draining with `Connection: close` on early HTTP rejections (fixing Node 20 keep-alive `ECONNRESET`).
 - **Structural Image Validation (`lib/image-meta.cjs`, `lib/store.cjs`):** Removed insecure extension-only fallback; enforced structural header verification for PNG (`IHDR`), JPEG (SOF markers), and WebP (`VP8`/`VP8L`/`VP8X`), canonical on-disk asset extensions derived from parsed bytes, and real binary MIME serving.
 - **State, Essay & CLI Fixes (`lib/orchestrator.cjs`, `lib/store.cjs`, `bin/ai-photo-studio.cjs`):** Added allowlisted `mergeCraftOptions` with explicit `null`/empty reset semantics, preserved locks/preset/craft/research across `applyVisionAnalysis`, connected `activeRenderVersion` rollback to `submitQa`, compiled all 5 engines per Essay frame, upgraded Web UI to 8-Point QA (`framingScore`), multi-effect checkboxes, toast feedback, and strict CLI option/port validation with pre-pipeline `--analyze`.
 

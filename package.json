@@ -1,6 +1,6 @@
 {
   "name": "ai-photo-studio",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "description": "Zero-dependency 8-agent Essence-Driven AI Photo Studio with live photography/cinematography research, pose geometry, camera/lens optics, optical filters, editorial makeup, and Anti-AI QA for OpenBot, Codex, Gemini CLI, and Claude.",
   "main": "index.cjs",
   "bin": {
