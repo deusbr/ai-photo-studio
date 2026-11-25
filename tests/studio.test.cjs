@@ -202,12 +202,13 @@ test('Local Studio Web Server creates autonomous/directed jobs, switches proposa
     assert.equal(htmlRes.status, 200);
     const html = await htmlRes.text();
     assert.match(html, /AI PHOTO STUDIO/);
-    assert.match(html, /6-Point Anti-AI Realism QA Gate/);
+    assert.match(html, /8-Point Anti-AI Realism QA Gate/);
 
+    const authHeaders = { 'content-type': 'application/json', 'x-studio-token': info.sessionToken };
     const pngB64 = makeFakePng(600, 600).toString('base64');
     const createRes = await fetch(`${info.url}/api/jobs`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: authHeaders,
       body: JSON.stringify({ fileName: 'input.png', base64: `data:image/png;base64,${pngB64}`, mode: 'autonomous', autoRun: true })
     });
     assert.equal(createRes.status, 201);
@@ -217,7 +218,7 @@ test('Local Studio Web Server creates autonomous/directed jobs, switches proposa
 
     const propRes = await fetch(`${info.url}/api/jobs/${created.job.id}/proposal`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: authHeaders,
       body: JSON.stringify({ proposalId: created.job.proposals[1].id })
     });
     assert.equal(propRes.status, 200);
@@ -226,7 +227,7 @@ test('Local Studio Web Server creates autonomous/directed jobs, switches proposa
 
     const renderRes = await fetch(`${info.url}/api/jobs/${created.job.id}/renders`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: authHeaders,
       body: JSON.stringify({ fileName: 'out.png', base64: pngB64, engine: 'gemini' })
     });
     assert.equal(renderRes.status, 201);
@@ -235,7 +236,7 @@ test('Local Studio Web Server creates autonomous/directed jobs, switches proposa
 
     const qaRes = await fetch(`${info.url}/api/jobs/${created.job.id}/qa`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: authHeaders,
       body: JSON.stringify({ verdict: 'pass', identityFidelityScore: 9.1, textureAndCatchlightsOk: true })
     });
     assert.equal(qaRes.status, 200);
@@ -267,15 +268,11 @@ test('Optional BYOK executor detects env providers and executes Gemini payload c
     let capturedUrl = '';
     const mockFetch = async (url) => {
       capturedUrl = url;
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({
-          candidates: [
-            { content: { parts: [{ inlineData: { mimeType: 'image/png', data: fakePng.toString('base64') } }] } }
-          ]
-        })
-      };
+      return new Response(JSON.stringify({
+        candidates: [
+          { content: { parts: [{ inlineData: { mimeType: 'image/png', data: fakePng.toString('base64') } }] } }
+        ]
+      }));
     };
 
     const result = await executeRenderWithProvider({
@@ -386,7 +383,7 @@ test('stdio MCP server serves v2.3.0 initialize, 15 tools, studio_run_autonomous
 
     child.kill();
     assert.equal(responses[0].result.serverInfo.name, 'ai-photo-studio');
-    assert.equal(responses[0].result.serverInfo.version, '4.0.0');
+    assert.equal(responses[0].result.serverInfo.version, require('../package.json').version);
     assert.equal(responses[1].result.tools.length, 18);
     const crewRes = JSON.parse(responses[2].result.content[0].text);
     assert.equal(crewRes.crew.length, 8);
@@ -445,37 +442,33 @@ test('Multi-shot Photo Essay, mobile screenshot crop detector, and optional Visi
       job: essay,
       provider: 'gemini',
       apiKey: 'dummy-test-key',
-      fetchImpl: async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          candidates: [
-            {
-              content: {
-                parts: [
-                  {
-                    text: JSON.stringify({
-                      subjectType: 'couple',
-                      essenceAnalysis: 'Intimate relaxed Sunday afternoon warmth in casual cream streetwear.',
-                      expressionTruth: 'Man calm closed-mouth; woman warm natural smile',
-                      garmentMicroDetails: 'Cream placket striped polo with left-chest circular badge',
-                      recommendedLocation: 'Sunlit modern concrete cafe lounge',
-                      motivatedLightSource: 'Soft north-facing glass window 45 degrees camera-left',
-                      contrastRatio: '3:1 sculpted editorial ratio',
-                      negativeFill: 'Heavy black V-flat negative fill on camera-right shadow side',
-                      kelvinSeparation: '5200K daylight subject key vs 6500K cool shaded background',
-                      customEssayFrames: [
-                        { id: 'bespoke-1', title: 'Bookstore Window Reflection', lens: '50mm f/1.4', angle: 'Over-shoulder reflection', location: 'Independent art bookstore window', lighting: 'Soft sky bounce', pose: 'Browsing art books side by side' },
-                        { id: 'bespoke-2', title: 'Vinyl Listening Lounge', lens: '35mm f/2.0', angle: 'Low corner framing', location: 'Warm timber listening bar', lighting: '3200K tungsten lamp motivated key', pose: 'Sharing headphones candidly' }
-                      ]
-                    })
-                  }
-                ]
-              }
+      fetchImpl: async () => new Response(JSON.stringify({
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: JSON.stringify({
+                    subjectType: 'couple',
+                    essenceAnalysis: 'Intimate relaxed Sunday afternoon warmth in casual cream streetwear.',
+                    expressionTruth: 'Man calm closed-mouth; woman warm natural smile',
+                    garmentMicroDetails: 'Cream placket striped polo with left-chest circular badge',
+                    recommendedLocation: 'Sunlit modern concrete cafe lounge',
+                    motivatedLightSource: 'Soft north-facing glass window 45 degrees camera-left',
+                    contrastRatio: '3:1 sculpted editorial ratio',
+                    negativeFill: 'Heavy black V-flat negative fill on camera-right shadow side',
+                    kelvinSeparation: '5200K daylight subject key vs 6500K cool shaded background',
+                    customEssayFrames: [
+                      { id: 'bespoke-1', title: 'Bookstore Window Reflection', lens: '50mm f/1.4', angle: 'Over-shoulder reflection', location: 'Independent art bookstore window', lighting: 'Soft sky bounce', pose: 'Browsing art books side by side' },
+                      { id: 'bespoke-2', title: 'Vinyl Listening Lounge', lens: '35mm f/2.0', angle: 'Low corner framing', location: 'Warm timber listening bar', lighting: '3200K tungsten lamp motivated key', pose: 'Sharing headphones candidly' }
+                    ]
+                  })
+                }
+              ]
             }
-          ]
-        })
-      })
+          }
+        ]
+      }))
     });
     const enriched = store.applyVisionAnalysis(essay.id, visionResult.analysis, visionResult.provider);
     assert.equal(enriched.essaySource, 'essence-vision-synthesized');
@@ -520,7 +513,7 @@ test('product-commercial preset omits portrait skin/eye terms and Web UI uses dy
 
       const resSearch = await fetch(`${info.url}/api/research`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'x-studio-token': info.sessionToken },
         body: JSON.stringify({ query: 'black pro-mist cinema trailer', liveWeb: false })
       });
       assert.equal(resSearch.status, 200);
@@ -552,21 +545,15 @@ test('Craft catalog, live-web research + 24h cache, optical conflict guardrails,
     const mockFetch = async (url) => {
       fetchCalls += 1;
       if (url.includes('wikipedia.org')) {
-        return {
-          ok: true,
-          json: async () => ({
-            query: { search: [{ title: 'Anamorphic format', snippet: '<span>Widescreen</span> 2.39:1 cinema optics.' }] }
-          })
-        };
+        return new Response(JSON.stringify({
+          query: { search: [{ title: 'Anamorphic format', snippet: '<span>Widescreen</span> 2.39:1 cinema optics.' }] }
+        }));
       }
-      return {
-        ok: true,
-        json: async () => ({
-          Heading: 'Black Pro-Mist',
-          AbstractText: 'Optical diffusion filter creating subtle highlight halation.',
-          AbstractURL: 'https://example.org/promist'
-        })
-      };
+      return new Response(JSON.stringify({
+        Heading: 'Black Pro-Mist',
+        AbstractText: 'Optical diffusion filter creating subtle highlight halation.',
+        AbstractURL: 'https://example.org/promist'
+      }));
     };
 
     const r1 = await researchPhotographyTechniques({

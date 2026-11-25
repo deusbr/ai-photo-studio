@@ -1,12 +1,13 @@
 'use strict';
 
-const { inspectImageFile, classifyImageGeometry } = require('./lib/image-meta.cjs');
+const { parseImageData, inspectImageFile, classifyImageGeometry } = require('./lib/image-meta.cjs');
 const { detectScreenshotCropBox, prepareCleanAnchor } = require('./lib/preprocess.cjs');
-const { STUDIO_CREW, STUDIO_PRESETS, normalizeRoleId, getCrewList, resolvePreset, buildProductionPacks } = require('./lib/crew.cjs');
+const { STUDIO_CREW, STUDIO_PRESETS, normalizeRoleId, getCrewList, resolvePreset, buildComfyWorkflow, buildProductionPacks } = require('./lib/crew.cjs');
 const { CRAFT_CATALOG } = require('./lib/craft-library.cjs');
 const { searchCraftCatalog, listCraftCatalog, researchPhotographyTechniques } = require('./lib/craft-research.cjs');
 const { recommendCraftStack } = require('./lib/craft-planner.cjs');
 const {
+  mergeCraftOptions,
   inferSubjectTypeFromHints,
   parseDirectedIntent,
   generateAutonomousProposals,
@@ -26,6 +27,7 @@ const { createStudioWebServer } = require('./lib/studio-web.cjs');
 const { getClientTargets, installStudioClients, checkStudioStatus } = require('./lib/installers.cjs');
 
 module.exports = {
+  parseImageData,
   inspectImageFile,
   classifyImageGeometry,
   detectScreenshotCropBox,
@@ -40,7 +42,9 @@ module.exports = {
   normalizeRoleId,
   getCrewList,
   resolvePreset,
+  buildComfyWorkflow,
   buildProductionPacks,
+  mergeCraftOptions,
   inferSubjectTypeFromHints,
   parseDirectedIntent,
   generateAutonomousProposals,

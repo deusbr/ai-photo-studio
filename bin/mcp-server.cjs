@@ -19,6 +19,17 @@ const store = new StudioStore(defaultStudioHome());
 let webInstance = null;
 let webInfo = null;
 
+const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
+const DEFAULT_PROTOCOL_VERSION = '2025-03-26';
+const MAX_HEADER_BYTES = 16 * 1024;
+const MAX_MCP_MESSAGE_BYTES = 64 * 1024 * 1024;
+const MAX_INLINE_IMAGE_BYTES = 4 * 1024 * 1024;
+
+let clientCapabilities = {};
+let negotiatedProtocolVersion = DEFAULT_PROTOCOL_VERSION;
+let nextServerRequestId = 1;
+const pendingClientRequests = new Map();
+
 const ROLE_ENUM = [
   'showrunner-director',
   'forensic-analyst',
@@ -56,11 +67,25 @@ const TOOLS = [
   {
     name: 'studio_list_crew',
     description: 'List the 8-specialist AI Photo Studio crew, presets, operating modes, and available executors.',
+    annotations: {
+      title: 'List Studio Crew',
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
+    },
     inputSchema: { type: 'object', properties: {}, additionalProperties: false }
   },
   {
     name: 'studio_create_job',
     description: 'Intake a local photo as the biometric/product anchor and start a studio job (optional autoRun).',
+    annotations: {
+      title: 'Create Studio Job',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false
+    },
     inputSchema: {
       type: 'object',
       required: ['imagePath'],
@@ -90,6 +115,13 @@ const TOOLS = [
   {
     name: 'studio_run_autonomous',
     description: 'Autonomous mode: triage photo and run 8-agent crew. Pass essenceAnalysis & customProposals synthesized from vision to avoid static templates.',
+    annotations: {
+      title: 'Run Autonomous Direction',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -107,6 +139,13 @@ const TOOLS = [
   {
     name: 'studio_run_directed',
     description: 'Directed mode: follow exact user art direction orders with intervention scope and preservation locks.',
+    annotations: {
+      title: 'Run Directed Shoot',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true
+    },
     inputSchema: {
       type: 'object',
       required: ['brief'],
@@ -134,6 +173,13 @@ const TOOLS = [
   {
     name: 'studio_run_essay',
     description: 'Plan and compile a cohesive multi-photo essay (2-6 frames). Pass essenceAnalysis & customFrames synthesized from the photo essence rather than static templates.',
+    annotations: {
+      title: 'Plan Multi-Shot Essay',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -152,13 +198,20 @@ const TOOLS = [
   },
   {
     name: 'studio_analyze_photo',
-    description: 'Optional BYOK vision pass: analyze the anchor photo via Gemini or OpenAI Vision to populate expressionTruth and garmentMicroDetails.',
+    description: 'Analyze the anchor photo via MCP sampling, Ollama, Gemini, or OpenAI Vision to populate expressionTruth and garmentMicroDetails.',
+    annotations: {
+      title: 'Analyze Anchor Photo',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true
+    },
     inputSchema: {
       type: 'object',
       required: ['jobId'],
       properties: {
         jobId: { type: 'string' },
-        provider: { type: 'string', enum: ['auto', 'gemini', 'openai'] },
+        provider: { type: 'string', enum: ['auto', 'sampling', 'gemini', 'openai', 'ollama'] },
         model: { type: 'string' }
       },
       additionalProperties: false
@@ -167,6 +220,13 @@ const TOOLS = [
   {
     name: 'studio_select_proposal',
     description: 'Switch between the 3 autonomous creative proposals on a job and recompile all crew passes.',
+    annotations: {
+      title: 'Select Proposal',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
+    },
     inputSchema: {
       type: 'object',
       required: ['jobId', 'proposalId'],
@@ -180,6 +240,13 @@ const TOOLS = [
   {
     name: 'studio_save_crew_pass',
     description: 'Record or override a specific specialist crew pass on a job.',
+    annotations: {
+      title: 'Save Crew Pass',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
+    },
     inputSchema: {
       type: 'object',
       required: ['jobId', 'role', 'payload'],
@@ -194,6 +261,13 @@ const TOOLS = [
   {
     name: 'studio_compile_prompts',
     description: 'Compile all crew passes into prompts for Codex, Gemini, Claude/ComfyUI, and Universal JSON.',
+    annotations: {
+      title: 'Compile Prompt Packs',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
+    },
     inputSchema: {
       type: 'object',
       required: ['jobId'],
@@ -206,14 +280,22 @@ const TOOLS = [
   },
   {
     name: 'studio_execute_render',
-    description: 'Optional BYOK executor: dispatch the compiled edit directly via Gemini or OpenAI API if configured.',
+    description: 'Optional BYOK executor: dispatch the compiled edit directly via Gemini, OpenAI, or ComfyUI API if configured.',
+    annotations: {
+      title: 'Execute Render',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true
+    },
     inputSchema: {
       type: 'object',
       required: ['jobId'],
       properties: {
         jobId: { type: 'string' },
         provider: { type: 'string', enum: ['gemini', 'openai', 'comfyui'] },
-        model: { type: 'string' }
+        model: { type: 'string' },
+        includeImage: { type: 'boolean', description: 'Attach rendered image block in response content when <= 4 MB (default true).' }
       },
       additionalProperties: false
     }
@@ -221,6 +303,13 @@ const TOOLS = [
   {
     name: 'studio_register_render',
     description: 'Attach a generated image file to a studio job lineage (v1, v2, ...) for Before/After QA.',
+    annotations: {
+      title: 'Register Render',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false
+    },
     inputSchema: {
       type: 'object',
       required: ['jobId', 'imagePath'],
@@ -229,14 +318,22 @@ const TOOLS = [
         imagePath: { type: 'string' },
         engine: { type: 'string' },
         notes: { type: 'string' },
-        parentVersion: { type: 'integer' }
+        parentVersion: { type: 'integer' },
+        includeImage: { type: 'boolean', description: 'Attach registered image block in response content when <= 4 MB (default true).' }
       },
       additionalProperties: false
     }
   },
   {
     name: 'studio_submit_qa',
-    description: 'Record the Anti-AI Realism Auditor 6-point scorecard; auto-routes fixes and delta prompt on revise.',
+    description: 'Record the Anti-AI Realism Auditor 8-point scorecard; auto-routes fixes and delta prompt on revise.',
+    annotations: {
+      title: 'Submit Anti-AI QA Scorecard',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false
+    },
     inputSchema: {
       type: 'object',
       required: ['jobId'],
@@ -259,21 +356,45 @@ const TOOLS = [
   {
     name: 'studio_get_job',
     description: 'Get full job state, crew board, proposals, prompt packs, asset lineage, and QA history.',
+    annotations: {
+      title: 'Get Studio Job',
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
+    },
     inputSchema: {
       type: 'object',
       required: ['jobId'],
-      properties: { jobId: { type: 'string' } },
+      properties: {
+        jobId: { type: 'string' },
+        includeImage: { type: 'boolean', description: 'Attach active render or clean anchor image block when <= 4 MB (default false).' }
+      },
       additionalProperties: false
     }
   },
   {
     name: 'studio_list_jobs',
     description: 'List recent photo studio production jobs.',
+    annotations: {
+      title: 'List Studio Jobs',
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
+    },
     inputSchema: { type: 'object', properties: {}, additionalProperties: false }
   },
   {
     name: 'studio_start_web',
     description: 'Start (or return URL of) the Local Web Studio Workbench on 127.0.0.1.',
+    annotations: {
+      title: 'Start Web Workbench',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
+    },
     inputSchema: {
       type: 'object',
       properties: { port: { type: 'integer', description: 'Port on 127.0.0.1 (default 4321).' } },
@@ -283,6 +404,13 @@ const TOOLS = [
   {
     name: 'studio_research_craft',
     description: 'Research photography & cinematography techniques (poses, cameras, lenses, optical filters, makeup, trailer looks) combining curated studio encyclopedia + optional live web lookup.',
+    annotations: {
+      title: 'Research Photography Craft',
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true
+    },
     inputSchema: {
       type: 'object',
       required: ['query'],
@@ -299,6 +427,13 @@ const TOOLS = [
   {
     name: 'studio_list_craft_catalog',
     description: 'Browse the full curated catalog of poses, cameras/emulsions, lenses, optical effects, makeup finishes, lighting rigs, and presets.',
+    annotations: {
+      title: 'List Craft Catalog',
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -311,6 +446,13 @@ const TOOLS = [
   {
     name: 'studio_compose_look',
     description: 'Recommend or apply a complete look recipe (pose, camera, lens, optical effects, makeup, lighting) with optical conflict warnings, optionally updating a job and recompiling prompts.',
+    annotations: {
+      title: 'Compose Craft Look',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -325,15 +467,202 @@ const TOOLS = [
   }
 ];
 
+function useContentLengthResponses() {
+  return process.env.MCP_RESPONSE_FRAMING === 'content-length' || process.argv.includes('--content-length-responses');
+}
+
+function writeProtocolMessage(payload) {
+  const json = JSON.stringify(payload);
+  if (useContentLengthResponses()) {
+    const byteLength = Buffer.byteLength(json, 'utf8');
+    process.stdout.write(`Content-Length: ${byteLength}\r\n\r\n${json}`);
+    return;
+  }
+  process.stdout.write(json + '\n');
+}
+
 function respond(id, result) {
-  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\n');
+  writeProtocolMessage({ jsonrpc: '2.0', id, result });
 }
 
 function respondError(id, code, message) {
-  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, error: { code, message } }) + '\n');
+  writeProtocolMessage({ jsonrpc: '2.0', id, error: { code, message } });
 }
 
-async function handleToolCall(name, args = {}) {
+function sendClientRequest(method, params = {}, timeoutMs = Number(process.env.MCP_SAMPLING_TIMEOUT_MS) || 45000) {
+  return new Promise((resolve, reject) => {
+    const id = `srv_${nextServerRequestId++}`;
+    const timer = setTimeout(() => {
+      pendingClientRequests.delete(id);
+      reject(new Error(`MCP client request "${method}" timed out after ${timeoutMs}ms.`));
+    }, timeoutMs);
+    if (typeof timer.unref === 'function') timer.unref();
+    pendingClientRequests.set(id, { resolve, reject, timer, method });
+    writeProtocolMessage({ jsonrpc: '2.0', id, method, params });
+  });
+}
+
+function rejectPendingClientRequests(reason) {
+  for (const [id, entry] of pendingClientRequests.entries()) {
+    clearTimeout(entry.timer);
+    entry.reject(new Error(reason));
+    pendingClientRequests.delete(id);
+  }
+}
+
+function parseVisionJsonFromText(rawText) {
+  let cleaned = String(rawText || '').trim();
+  const fenceMatch = cleaned.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  if (fenceMatch) {
+    cleaned = fenceMatch[1].trim();
+  } else {
+    cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  }
+  try {
+    const parsed = JSON.parse(cleaned);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+  } catch {}
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    const parsed = JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+  }
+  throw new Error('MCP sampling vision response did not return a valid JSON object.');
+}
+
+function resolveAnchorPayload(job) {
+  const targetAsset = job.sourceImage?.cleanedAssetName || job.sourceImage?.assetName;
+  const anchorPath = store.resolveAssetPath(job.id, targetAsset);
+  const bytes = fs.readFileSync(anchorPath);
+  const mimeType = job.sourceImage?.cleanedAssetName && targetAsset.endsWith('.jpg')
+    ? 'image/jpeg'
+    : (job.sourceImage?.mimeType || 'image/png');
+  return {
+    assetUsed: targetAsset,
+    mimeType,
+    base64: bytes.toString('base64')
+  };
+}
+
+function buildSamplingVisionInstruction() {
+  return [
+    'Analyze this photo deeply as a master Executive Showrunner, Forensic Photo Analyst, Art Director, and Director of Photography.',
+    'Feel the emotional essence, clothing archetype, color story, and natural world of THIS specific photo—do NOT output generic or cliché European stone terraces unless the photo truly calls for it.',
+    'Return ONLY a compact JSON object with these keys:',
+    'subjectType (portrait|couple|product|night|outdoor|executive),',
+    'essenceAnalysis (2-3 sentences capturing mood, wardrobe archetype, cultural context, and visual subtext),',
+    'poseAndExpressionAudit, lightingShadowsAudit, correctionsSummary,',
+    'expressionTruth (exact mouth/eye expression and eyelid relaxation to preserve without inventing generic smiles),',
+    'garmentMicroDetails (exact collars, plackets, stripe spacing, chest patches/logos, caps, jewelry, buttons, nail polish, bags),',
+    'antiBeautificationLocks (pores, freckles, vellus hair, natural asymmetry to preserve),',
+    'recommendedLocation (bespoke context-matched setting derived from the photo essence),',
+    'artDirectionRationale, compositionArchitecture (foreground depth layering + frame-within-frame + decisive moment),',
+    'makeupStyling (natural grooming or editorial finish honoring visible pores & texture),',
+    'motivatedLightSource, contrastRatio (e.g. 3:1 or 4:1), negativeFill, kelvinSeparation,',
+    'customProposals (array of 3 unique creative directions tailored ONLY to this photo, each with id, label, preset, interventionScope, confidence, concept, locationOrBackdrop, compositionArchitecture, motivatedLightSource, contrastRatio, negativeFill, kelvinSeparation, cameraAndEmulsion, primeLens, rationale),',
+    'customEssayFrames (array of 5 unique cohesive storyboard shots evolving naturally from this photo essence, each with id, title, lens, angle, location, compositionArchitecture, motivatedLightSource, contrastRatio, negativeFill, kelvinSeparation, lighting, pose).'
+  ].join(' ');
+}
+
+function extractSamplingText(result) {
+  if (!result) return '';
+  if (typeof result === 'string') return result;
+  if (typeof result.content === 'string') return result.content;
+  if (Array.isArray(result.content)) {
+    return result.content.map((c) => c?.text || '').join('\n');
+  }
+  if (result.content && typeof result.content === 'object') {
+    return result.content.text || '';
+  }
+  return result.text || '';
+}
+
+async function analyzeAnchorWithMcpSampling(job, requester) {
+  const anchor = resolveAnchorPayload(job);
+  const response = await requester('sampling/createMessage', {
+    messages: [
+      {
+        role: 'user',
+        content: {
+          type: 'image',
+          data: anchor.base64,
+          mimeType: anchor.mimeType
+        }
+      },
+      {
+        role: 'user',
+        content: {
+          type: 'text',
+          text: buildSamplingVisionInstruction()
+        }
+      }
+    ],
+    maxTokens: 2048
+  });
+  const rawText = extractSamplingText(response);
+  const parsed = parseVisionJsonFromText(rawText);
+  return {
+    provider: 'mcp-sampling',
+    assetUsed: anchor.assetUsed,
+    analysis: parsed
+  };
+}
+
+function resolveMimeTypeForAsset(assetName, fallbackMime = 'image/png') {
+  const ext = path.extname(String(assetName || '')).toLowerCase();
+  if (ext === '.png') return 'image/png';
+  if (ext === '.webp') return 'image/webp';
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  return fallbackMime || 'image/png';
+}
+
+function selectTargetAssetForJob(job, preferRender = true) {
+  if (!job) return null;
+  if (preferRender && Array.isArray(job.renders) && job.renders.length > 0) {
+    const active = job.activeRenderVersion !== undefined && job.activeRenderVersion !== null
+      ? job.renders.find((r) => r.version === Number(job.activeRenderVersion))
+      : null;
+    const chosen = active || job.renders[job.renders.length - 1];
+    if (chosen?.assetName) {
+      return {
+        assetName: chosen.assetName,
+        mimeType: chosen.mimeType || resolveMimeTypeForAsset(chosen.assetName)
+      };
+    }
+  }
+  const anchorAsset = job.sourceImage?.cleanedAssetName || job.sourceImage?.assetName;
+  if (!anchorAsset) return null;
+  return {
+    assetName: anchorAsset,
+    mimeType: resolveMimeTypeForAsset(anchorAsset, job.sourceImage?.mimeType)
+  };
+}
+
+function buildImageContentBlocks(job, { preferRender = true, maxBytes = Number(process.env.MCP_MAX_IMAGE_BYTES) || MAX_INLINE_IMAGE_BYTES } = {}) {
+  const target = selectTargetAssetForJob(job, preferRender);
+  if (!target) return [];
+  try {
+    const fullPath = store.resolveAssetPath(job.id, target.assetName);
+    const stat = fs.statSync(fullPath);
+    if (!stat.isFile() || stat.size === 0 || stat.size > maxBytes) {
+      return [];
+    }
+    const buf = fs.readFileSync(fullPath);
+    return [
+      {
+        type: 'image',
+        data: buf.toString('base64'),
+        mimeType: target.mimeType
+      }
+    ];
+  } catch {
+    return [];
+  }
+}
+
+async function handleToolCall(name, args = {}, context = {}) {
+  const requester = context.sendClientRequest || sendClientRequest;
   switch (name) {
     case 'studio_list_crew':
       return {
@@ -414,6 +743,13 @@ async function handleToolCall(name, args = {}) {
         const created = store.createJobFromFile({ imagePath: args.imagePath, mode: 'directed', brief: args.brief || '', craftOptions: args.craftOptions });
         jobId = created.id;
       }
+      const researchInsights = args.craftOptions?.researchQuery
+        ? await researchPhotographyTechniques({
+            query: args.craftOptions.researchQuery,
+            subjectType: args.subjectHint || null,
+            studioHome: store.studioHome
+          })
+        : null;
       return {
         job: store.runEssay(jobId, {
           count: args.count || 5,
@@ -422,16 +758,51 @@ async function handleToolCall(name, args = {}) {
           essenceAnalysis: args.essenceAnalysis,
           customFrames: args.customFrames,
           craftOptions: args.craftOptions,
+          researchInsights,
           locks: { keepWardrobe: args.keepWardrobe !== false }
         })
       };
     }
     case 'studio_analyze_photo': {
       const current = store.readJob(args.jobId);
+      const requestedProvider = args.provider || 'auto';
+      const hasCloudKeys = Boolean(
+        (process.env.GEMINI_API_KEY && String(process.env.GEMINI_API_KEY).trim()) ||
+        (process.env.OPENAI_API_KEY && String(process.env.OPENAI_API_KEY).trim())
+      );
+      const canSample = Boolean(clientCapabilities && clientCapabilities.sampling);
+
+      if (requestedProvider === 'sampling' || requestedProvider === 'mcp-sampling') {
+        if (!canSample) {
+          throw new Error('MCP client did not advertise sampling capability during initialize.');
+        }
+        const vision = await analyzeAnchorWithMcpSampling(current, requester);
+        return {
+          job: store.applyVisionAnalysis(current.id, vision.analysis, 'mcp-sampling'),
+          provider: 'mcp-sampling',
+          assetUsed: vision.assetUsed
+        };
+      }
+
+      if (requestedProvider === 'auto' && !hasCloudKeys && canSample) {
+        try {
+          const vision = await analyzeAnchorWithMcpSampling(current, requester);
+          return {
+            job: store.applyVisionAnalysis(current.id, vision.analysis, 'mcp-sampling'),
+            provider: 'mcp-sampling',
+            assetUsed: vision.assetUsed
+          };
+        } catch (samplingErr) {
+          if (!process.env.OLLAMA_URL) {
+            throw samplingErr;
+          }
+        }
+      }
+
       const vision = await analyzeAnchorWithVision({
         store,
         job: current,
-        provider: args.provider || 'auto',
+        provider: requestedProvider,
         model: args.model || ''
       });
       return {
@@ -454,6 +825,15 @@ async function handleToolCall(name, args = {}) {
         provider: args.provider || 'gemini',
         model: args.model || ''
       });
+      if (rendered && rendered.queued && !Buffer.isBuffer(rendered.buffer)) {
+        return {
+          job,
+          engine: rendered.engine,
+          queued: true,
+          promptId: rendered.promptId || null,
+          workflow: rendered.workflow || null
+        };
+      }
       const updated = store.registerRenderFromBuffer(job.id, rendered);
       return { job: updated, engine: rendered.engine };
     }
@@ -485,11 +865,17 @@ async function handleToolCall(name, args = {}) {
     case 'studio_list_jobs':
       return { jobs: store.listJobs(), webUrl: webInfo?.url || null };
     case 'studio_start_web': {
+      const requestedPort = args.port !== undefined && args.port !== null ? Number(args.port) : null;
+      if (webInstance && webInfo && requestedPort !== null && requestedPort !== webInfo.port) {
+        await webInstance.close();
+        webInstance = null;
+        webInfo = null;
+      }
       if (!webInstance) {
-        webInstance = createStudioWebServer({ store, port: args.port || 4321 });
+        webInstance = createStudioWebServer({ store, port: requestedPort !== null ? requestedPort : 4321 });
         webInfo = await webInstance.listen();
       }
-      return { ok: true, ...webInfo };
+      return { ok: true, port: webInfo.port, url: webInfo.url };
     }
     case 'studio_research_craft':
       return researchPhotographyTechniques({
@@ -585,16 +971,57 @@ const STUDIO_PROMPTS = [
   }
 ];
 
-async function handleMessage(msg) {
+function shouldAttachToolImages(toolName, args = {}) {
+  const explicit = args.includeImage !== undefined ? args.includeImage : args.includeImages;
+  if (toolName === 'studio_get_job') {
+    return explicit === true;
+  }
+  if (toolName === 'studio_execute_render' || toolName === 'studio_register_render') {
+    return explicit !== false;
+  }
+  return false;
+}
+
+function handleClientResponse(msg) {
+  const pending = pendingClientRequests.get(msg.id);
+  if (!pending) return false;
+  clearTimeout(pending.timer);
+  pendingClientRequests.delete(msg.id);
+  if (msg.error) {
+    pending.reject(new Error(msg.error.message || `Client error (${msg.error.code ?? 'unknown'})`));
+  } else {
+    pending.resolve(msg.result);
+  }
+  return true;
+}
+
+async function handleMessage(msg, context = {}) {
   if (!msg || typeof msg !== 'object') return;
+
+  if (!msg.method && msg.id !== undefined && ('result' in msg || 'error' in msg)) {
+    handleClientResponse(msg);
+    return;
+  }
+
   if (msg.method === 'initialize') {
+    const requestedVersion = msg.params?.protocolVersion;
+    negotiatedProtocolVersion = SUPPORTED_PROTOCOL_VERSIONS.includes(requestedVersion)
+      ? requestedVersion
+      : DEFAULT_PROTOCOL_VERSION;
+    clientCapabilities = msg.params?.capabilities && typeof msg.params.capabilities === 'object'
+      ? msg.params.capabilities
+      : {};
     return respond(msg.id, {
-      protocolVersion: '2024-11-05',
+      protocolVersion: negotiatedProtocolVersion,
       serverInfo: { name: 'ai-photo-studio', version: require('../package.json').version },
       capabilities: { tools: {}, resources: {}, prompts: {} }
     });
   }
   if (msg.method === 'notifications/initialized') return;
+  if (msg.method === 'ping') {
+    if (msg.id !== undefined) return respond(msg.id, {});
+    return;
+  }
   if (msg.method === 'tools/list') {
     return respond(msg.id, { tools: TOOLS });
   }
@@ -638,9 +1065,16 @@ async function handleMessage(msg) {
   if (msg.method === 'tools/call') {
     const { name, arguments: args = {} } = msg.params || {};
     try {
-      const payload = await handleToolCall(name, args);
+      const payload = await handleToolCall(name, args, context);
+      const imageBlocks = shouldAttachToolImages(name, args) && payload?.job
+        ? buildImageContentBlocks(payload.job, { preferRender: true })
+        : [];
       return respond(msg.id, {
-        content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }]
+        content: [
+          { type: 'text', text: JSON.stringify(payload, null, 2) },
+          ...imageBlocks
+        ],
+        structuredContent: payload
       });
     } catch (err) {
       if (err.code === -32601) {
@@ -657,39 +1091,151 @@ async function handleMessage(msg) {
   }
 }
 
-if (require.main === module) {
+function findHeaderTerminator(buf) {
+  const crlfIdx = buf.indexOf('\r\n\r\n');
+  const lfIdx = buf.indexOf('\n\n');
+  if (crlfIdx !== -1 && (lfIdx === -1 || crlfIdx <= lfIdx)) {
+    return { index: crlfIdx, length: 4 };
+  }
+  if (lfIdx !== -1) {
+    return { index: lfIdx, length: 2 };
+  }
+  return null;
+}
+
+function parseContentLengthHeader(headerText) {
+  const lines = headerText.split(/\r?\n/);
+  let contentLength = null;
+  for (const line of lines) {
+    const match = line.match(/^content-length\s*:\s*(\d+)\s*$/i);
+    if (match) {
+      contentLength = Number(match[1]);
+    }
+  }
+  if (contentLength === null || !Number.isInteger(contentLength) || contentLength < 0 || contentLength > MAX_MCP_MESSAGE_BYTES) {
+    return null;
+  }
+  return contentLength;
+}
+
+function createStdioFramingParser(onMessage, onParseError) {
   let buffer = Buffer.alloc(0);
-  const processLine = (line) => {
-    const trimmed = line.trim();
-    if (!trimmed || /^content-length:/i.test(trimmed)) return;
+
+  const dispatchJson = (rawText) => {
+    const trimmed = String(rawText || '').trim();
+    if (!trimmed) return;
+    let msg;
     try {
-      const msg = JSON.parse(trimmed);
+      msg = JSON.parse(trimmed);
+    } catch {
+      onParseError('Parse error: malformed JSON payload');
+      return;
+    }
+    onMessage(msg);
+  };
+
+  const skipLeadingWhitespace = () => {
+    let offset = 0;
+    while (offset < buffer.length) {
+      const b = buffer[offset];
+      if (b === 0x0d || b === 0x0a || b === 0x20 || b === 0x09) {
+        offset += 1;
+      } else {
+        break;
+      }
+    }
+    if (offset > 0) {
+      buffer = buffer.subarray(offset);
+    }
+  };
+
+  return {
+    push(chunk) {
+      buffer = Buffer.concat([buffer, Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, 'utf8')]);
+      while (buffer.length > 0) {
+        skipLeadingWhitespace();
+        if (buffer.length === 0) break;
+
+        const peek = buffer.subarray(0, Math.min(buffer.length, 64)).toString('utf8');
+        const looksLikeHeader = /^(?:content-length|content-type|[a-z][a-z0-9-]*)\s*:/i.test(peek) && !peek.startsWith('{') && !peek.startsWith('[');
+
+        if (looksLikeHeader) {
+          const term = findHeaderTerminator(buffer);
+          if (!term) {
+            if (buffer.length > MAX_HEADER_BYTES) {
+              buffer = Buffer.alloc(0);
+              onParseError('Parse error: MCP header exceeds maximum size');
+            }
+            break;
+          }
+          if (term.index > MAX_HEADER_BYTES) {
+            buffer = buffer.subarray(term.index + term.length);
+            onParseError('Parse error: MCP header exceeds maximum size');
+            continue;
+          }
+          const headerText = buffer.subarray(0, term.index).toString('utf8');
+          const contentLength = parseContentLengthHeader(headerText);
+          if (contentLength === null) {
+            buffer = buffer.subarray(term.index + term.length);
+            onParseError('Parse error: invalid or missing Content-Length header');
+            continue;
+          }
+          const bodyStart = term.index + term.length;
+          const totalBytes = bodyStart + contentLength;
+          if (buffer.length < totalBytes) {
+            break;
+          }
+          const bodyText = buffer.subarray(bodyStart, totalBytes).toString('utf8');
+          buffer = buffer.subarray(totalBytes);
+          dispatchJson(bodyText);
+          continue;
+        }
+
+        const nlIdx = buffer.indexOf(0x0a);
+        if (nlIdx === -1) break;
+        const lineText = buffer.subarray(0, nlIdx).toString('utf8');
+        buffer = buffer.subarray(nlIdx + 1);
+        dispatchJson(lineText);
+      }
+    },
+    end() {
+      skipLeadingWhitespace();
+      if (buffer.length > 0) {
+        const trailing = buffer.toString('utf8');
+        buffer = Buffer.alloc(0);
+        dispatchJson(trailing);
+      }
+    }
+  };
+}
+
+if (require.main === module) {
+  const parser = createStdioFramingParser(
+    (msg) => {
       handleMessage(msg).catch((err) => {
         if (msg && msg.id !== undefined) respondError(msg.id, -32603, err.message);
       });
-    } catch {}
-  };
-
-  process.stdin.on('data', (chunk) => {
-    buffer = Buffer.concat([buffer, chunk]);
-    while (buffer.length > 0) {
-      const headerMatch = buffer.toString('utf8', 0, Math.min(buffer.length, 256)).match(/^Content-Length:\s*(\d+)\r?\n\r?\n/i);
-      if (headerMatch) {
-        const headerBytes = Buffer.byteLength(headerMatch[0], 'utf8');
-        const bodyLen = Number(headerMatch[1]);
-        if (buffer.length < headerBytes + bodyLen) break;
-        const body = buffer.slice(headerBytes, headerBytes + bodyLen).toString('utf8');
-        buffer = buffer.slice(headerBytes + bodyLen);
-        processLine(body);
-        continue;
-      }
-      const nlIdx = buffer.indexOf(0x0a);
-      if (nlIdx === -1) break;
-      const line = buffer.slice(0, nlIdx).toString('utf8');
-      buffer = buffer.slice(nlIdx + 1);
-      processLine(line);
+    },
+    (errorMsg) => {
+      respondError(null, -32700, errorMsg);
     }
+  );
+
+  process.stdin.on('data', (chunk) => parser.push(chunk));
+  process.stdin.on('end', () => {
+    parser.end();
+    rejectPendingClientRequests('MCP stdin stream closed.');
   });
 }
 
-module.exports = { TOOLS, STUDIO_RESOURCES, STUDIO_PROMPTS, handleMessage, handleToolCall };
+module.exports = {
+  TOOLS,
+  STUDIO_RESOURCES,
+  STUDIO_PROMPTS,
+  SUPPORTED_PROTOCOL_VERSIONS,
+  handleMessage,
+  handleToolCall,
+  createStdioFramingParser,
+  parseVisionJsonFromText,
+  buildImageContentBlocks
+};

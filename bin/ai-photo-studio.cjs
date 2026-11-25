@@ -10,6 +10,7 @@ const { detectAvailableExecutors, analyzeAnchorWithVision } = require('../lib/ex
 
 function parseArgs(argv) {
   const [cmd = 'help', ...rest] = argv;
+  if (cmd.startsWith('-') && cmd !== '--help' && cmd !== '-h') throw new Error('Unknown option: ' + cmd);
   const opts = {
     cmd,
     positional: [],
@@ -38,7 +39,12 @@ function parseArgs(argv) {
   };
   for (let i = 0; i < rest.length; i += 1) {
     const a = rest[i];
-    if (a === '--port' && rest[i + 1]) opts.port = Number(rest[++i]) || 4321;
+    const valueFlags = ['--port', '--clients', '--brief', '--scope', '--preset', '--subject', '--count', '--pose', '--camera', '--lens', '--effect', '--makeup', '--lighting', '--research', '--category'];
+    if (valueFlags.includes(a) && (!rest[i + 1] || (rest[i + 1].startsWith('--') || rest[i + 1] === '-h'))) throw new Error('Missing value for option: ' + a);
+    if (a === '--port') {
+      opts.port = Number(rest[++i]);
+      if (!Number.isInteger(opts.port) || opts.port < 1 || opts.port > 65535) throw new Error('Invalid --port: expected an integer from 1 to 65535.');
+    }
     else if (a === '--clients' && rest[i + 1]) opts.clients = rest[++i].split(',').map((s) => s.trim()).filter(Boolean);
     else if (a === '--brief' && rest[i + 1]) opts.brief = rest[++i];
     else if (a === '--scope' && rest[i + 1]) opts.scope = rest[++i];
@@ -60,7 +66,9 @@ function parseArgs(argv) {
     else if (a === '--keep-background') opts.keepBackground = true;
     else if (a === '--keep-framing') opts.keepFraming = true;
     else if (a === '--json') opts.json = true;
+    else if (a === '--help' || a === '-h') opts.cmd = 'help';
     else if (!a.startsWith('-')) opts.positional.push(a);
+    else throw new Error('Unknown option: ' + a);
   }
   return opts;
 }
@@ -119,10 +127,10 @@ function printUsage() {
   ].join('\n'));
 }
 
-async function maybeAnalyze(store, job, enabled) {
-  if (!enabled) return job;
+async function runWithAnalysis(store, job, enabled, method, options) {
+  if (!enabled) return store[method](job.id, options);
   const vision = await analyzeAnchorWithVision({ store, job });
-  return store.applyVisionAnalysis(job.id, vision.analysis, vision.provider);
+  return store.applyVisionAnalysis(job.id, vision.analysis, vision.provider, { ...options, essayMode: method === 'runEssay' });
 }
 
 async function main() {
@@ -190,9 +198,9 @@ async function main() {
     const researchInsights = opts.research
       ? await researchPhotographyTechniques({ query: opts.research, liveWeb: !opts.offline, studioHome: store.studioHome })
       : null;
-    const created = store.createJobFromFile({ imagePath, mode: 'autonomous', subjectHint: opts.subject, craftOptions });
-    let job = store.runAutonomous(created.id, { subjectHint: opts.subject, craftOptions, researchInsights });
-    job = await maybeAnalyze(store, job, opts.analyze);
+    const locks = { keepPose: opts.keepPose, keepWardrobe: opts.keepWardrobe, keepBackground: opts.keepBackground, keepFraming: opts.keepFraming };
+    const created = store.createJobFromFile({ imagePath, mode: 'autonomous', brief: opts.brief, scope: opts.scope, preset: opts.preset, locks, subjectHint: opts.subject, craftOptions });
+    let job = await runWithAnalysis(store, created, opts.analyze, 'runAutonomous', { mode: 'autonomous', brief: opts.brief, scope: opts.scope, preset: opts.preset, locks, subjectHint: opts.subject, craftOptions, researchInsights });
     if (opts.json) {
       console.log(JSON.stringify(job, null, 2));
       return;
@@ -230,7 +238,8 @@ async function main() {
       subjectHint: opts.subject,
       craftOptions
     });
-    let job = store.runDirected(created.id, {
+    let job = await runWithAnalysis(store, created, opts.analyze, 'runDirected', {
+      mode: 'directed',
       brief: opts.brief,
       scope: opts.scope,
       preset: opts.preset,
@@ -239,7 +248,6 @@ async function main() {
       craftOptions,
       researchInsights
     });
-    job = await maybeAnalyze(store, job, opts.analyze);
     if (opts.json) {
       console.log(JSON.stringify(job, null, 2));
       return;
@@ -264,15 +272,15 @@ async function main() {
       subjectHint: opts.subject,
       craftOptions
     });
-    let job = store.runEssay(created.id, {
+    let job = await runWithAnalysis(store, created, opts.analyze, 'runEssay', {
+      mode: 'directed', scope: opts.scope, preset: opts.preset,
       count: opts.count,
       subjectHint: opts.subject,
       brief: opts.brief,
       craftOptions,
       researchInsights,
-      locks: { keepWardrobe: !opts.brief || opts.keepWardrobe }
+      locks: { keepWardrobe: !opts.brief || opts.keepWardrobe, keepPose: opts.keepPose, keepBackground: opts.keepBackground, keepFraming: opts.keepFraming }
     });
-    job = await maybeAnalyze(store, job, opts.analyze);
     if (opts.json) {
       console.log(JSON.stringify(job, null, 2));
       return;

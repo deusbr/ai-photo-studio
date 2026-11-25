@@ -7,9 +7,17 @@
 [![Node.js >= 18](https://img.shields.io/badge/node-%3E%3D18.0.0-339933?logo=node.js&logoColor=white)](package.json)
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](package.json)
 
-Zero-dependency **8-Agent Essence-Driven AI Photo Studio (v4.0)** for **OpenBot**, **Codex**, **Gemini CLI**, and **Claude Code / Claude Desktop** — combining visual essence extraction, a **curated + live-web photography research engine**, **posing geometry**, **cinema cameras & film emulsions**, **prime/anamorphic lenses**, **optical diffusion filters**, **editorial makeup science**, and **motivated cinematography lighting** without canned AI clichés.
+Zero-dependency **8-Agent Essence-Driven AI Photo Studio (v4.1)** for **OpenBot**, **Codex**, **Gemini CLI**, and **Claude Code / Claude Desktop** — combining visual essence extraction, a **curated + live-web photography research engine**, **posing geometry**, **cinema cameras & film emulsions**, **prime/anamorphic lenses**, **optical diffusion filters**, **editorial makeup science**, and **motivated cinematography lighting** without canned AI clichés.
 
-Built to run **Subscription-First** (zero API keys required) on your existing AI plan, with optional BYOK execution (`GEMINI_API_KEY` / `OPENAI_API_KEY` / `COMFYUI_URL`) when configured.
+Built to run **Subscription-First** (zero API keys required) on your existing AI plan, with optional local/BYOK execution (`OLLAMA_URL` / `COMFYUI_URL` / `GEMINI_API_KEY` / `OPENAI_API_KEY`) when configured.
+
+---
+
+## What's New in v4.1
+
+- **Local Web Hardening & Structural Image Validation (`lib/studio-web.cjs`, `lib/image-meta.cjs`):** Loopback `Host` validation, `Origin`/`Sec-Fetch-Site` enforcement, strict `application/json` checks, per-session `X-Studio-Token` CSRF protection, rotating CSP nonces, 8-Point Anti-AI QA (`framingScore`), and strict PNG/JPEG/WebP magic-byte header verification.
+- **MCP Next-Gen (`2025-06-18`) & Glama Docker (`bin/mcp-server.cjs`, `Dockerfile`):** Protocol version negotiation (`2025-06-18`, `2025-03-26`, `2024-11-05`), `ping`, `ToolAnnotations` across all 18 tools, `structuredContent`, bounded multimodal `type: "image"` blocks, bidirectional `sampling/createMessage` vision analysis, hardened `Content-Length`/NDJSON framing, and a non-root `node:24-alpine` `Dockerfile`.
+- **Prompt Compiler v5, Real ComfyUI & Local Ollama Vision (`lib/crew.cjs`, `lib/executors.cjs`):** Dedicated `positivePrompt` / `negativePrompt`, affirmative `fluxPrompt`, native `midjourneyPrompt` (`--style raw --no`), deduplicated guards, sanitized `researchHighlights` injection, importable `comfyWorkflow` JSON graph, real ComfyUI `/upload/image` + `/prompt` + `/history` + `/view` execution with monotonic HTTP deadlines, and local `OLLAMA_URL` vision support.
 
 ---
 
