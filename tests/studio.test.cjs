@@ -268,15 +268,11 @@ test('Optional BYOK executor detects env providers and executes Gemini payload c
     let capturedUrl = '';
     const mockFetch = async (url) => {
       capturedUrl = url;
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({
-          candidates: [
-            { content: { parts: [{ inlineData: { mimeType: 'image/png', data: fakePng.toString('base64') } }] } }
-          ]
-        })
-      };
+      return new Response(JSON.stringify({
+        candidates: [
+          { content: { parts: [{ inlineData: { mimeType: 'image/png', data: fakePng.toString('base64') } }] } }
+        ]
+      }));
     };
 
     const result = await executeRenderWithProvider({
@@ -446,37 +442,33 @@ test('Multi-shot Photo Essay, mobile screenshot crop detector, and optional Visi
       job: essay,
       provider: 'gemini',
       apiKey: 'dummy-test-key',
-      fetchImpl: async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          candidates: [
-            {
-              content: {
-                parts: [
-                  {
-                    text: JSON.stringify({
-                      subjectType: 'couple',
-                      essenceAnalysis: 'Intimate relaxed Sunday afternoon warmth in casual cream streetwear.',
-                      expressionTruth: 'Man calm closed-mouth; woman warm natural smile',
-                      garmentMicroDetails: 'Cream placket striped polo with left-chest circular badge',
-                      recommendedLocation: 'Sunlit modern concrete cafe lounge',
-                      motivatedLightSource: 'Soft north-facing glass window 45 degrees camera-left',
-                      contrastRatio: '3:1 sculpted editorial ratio',
-                      negativeFill: 'Heavy black V-flat negative fill on camera-right shadow side',
-                      kelvinSeparation: '5200K daylight subject key vs 6500K cool shaded background',
-                      customEssayFrames: [
-                        { id: 'bespoke-1', title: 'Bookstore Window Reflection', lens: '50mm f/1.4', angle: 'Over-shoulder reflection', location: 'Independent art bookstore window', lighting: 'Soft sky bounce', pose: 'Browsing art books side by side' },
-                        { id: 'bespoke-2', title: 'Vinyl Listening Lounge', lens: '35mm f/2.0', angle: 'Low corner framing', location: 'Warm timber listening bar', lighting: '3200K tungsten lamp motivated key', pose: 'Sharing headphones candidly' }
-                      ]
-                    })
-                  }
-                ]
-              }
+      fetchImpl: async () => new Response(JSON.stringify({
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: JSON.stringify({
+                    subjectType: 'couple',
+                    essenceAnalysis: 'Intimate relaxed Sunday afternoon warmth in casual cream streetwear.',
+                    expressionTruth: 'Man calm closed-mouth; woman warm natural smile',
+                    garmentMicroDetails: 'Cream placket striped polo with left-chest circular badge',
+                    recommendedLocation: 'Sunlit modern concrete cafe lounge',
+                    motivatedLightSource: 'Soft north-facing glass window 45 degrees camera-left',
+                    contrastRatio: '3:1 sculpted editorial ratio',
+                    negativeFill: 'Heavy black V-flat negative fill on camera-right shadow side',
+                    kelvinSeparation: '5200K daylight subject key vs 6500K cool shaded background',
+                    customEssayFrames: [
+                      { id: 'bespoke-1', title: 'Bookstore Window Reflection', lens: '50mm f/1.4', angle: 'Over-shoulder reflection', location: 'Independent art bookstore window', lighting: 'Soft sky bounce', pose: 'Browsing art books side by side' },
+                      { id: 'bespoke-2', title: 'Vinyl Listening Lounge', lens: '35mm f/2.0', angle: 'Low corner framing', location: 'Warm timber listening bar', lighting: '3200K tungsten lamp motivated key', pose: 'Sharing headphones candidly' }
+                    ]
+                  })
+                }
+              ]
             }
-          ]
-        })
-      })
+          }
+        ]
+      }))
     });
     const enriched = store.applyVisionAnalysis(essay.id, visionResult.analysis, visionResult.provider);
     assert.equal(enriched.essaySource, 'essence-vision-synthesized');
@@ -553,21 +545,15 @@ test('Craft catalog, live-web research + 24h cache, optical conflict guardrails,
     const mockFetch = async (url) => {
       fetchCalls += 1;
       if (url.includes('wikipedia.org')) {
-        return {
-          ok: true,
-          json: async () => ({
-            query: { search: [{ title: 'Anamorphic format', snippet: '<span>Widescreen</span> 2.39:1 cinema optics.' }] }
-          })
-        };
+        return new Response(JSON.stringify({
+          query: { search: [{ title: 'Anamorphic format', snippet: '<span>Widescreen</span> 2.39:1 cinema optics.' }] }
+        }));
       }
-      return {
-        ok: true,
-        json: async () => ({
-          Heading: 'Black Pro-Mist',
-          AbstractText: 'Optical diffusion filter creating subtle highlight halation.',
-          AbstractURL: 'https://example.org/promist'
-        })
-      };
+      return new Response(JSON.stringify({
+        Heading: 'Black Pro-Mist',
+        AbstractText: 'Optical diffusion filter creating subtle highlight halation.',
+        AbstractURL: 'https://example.org/promist'
+      }));
     };
 
     const r1 = await researchPhotographyTechniques({

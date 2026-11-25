@@ -483,13 +483,9 @@ test('studio_execute_render attaches multimodal image block by default and respe
       const fs = require('node:fs');
       const { handleMessage } = require(${JSON.stringify(SERVER_PATH)});
       const b64 = fs.readFileSync(${JSON.stringify(anchorPath)}).toString('base64');
-      globalThis.fetch = async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: b64 } }] } }]
-        })
-      });
+      globalThis.fetch = async () => new Response(JSON.stringify({
+        candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: b64 } }] } }]
+      }));
       const captured = [];
       const origWrite = process.stdout.write.bind(process.stdout);
       process.stdout.write = (chunk) => { captured.push(chunk.toString('utf8')); return true; };

@@ -8,7 +8,7 @@
     "ai-photo-studio-mcp": "./bin/mcp-server.cjs"
   },
   "scripts": {
-    "check": "node --check index.cjs && node --check bin/ai-photo-studio.cjs && node --check bin/mcp-server.cjs && node --check lib/image-meta.cjs && node --check lib/preprocess.cjs && node --check lib/craft-library.cjs && node --check lib/craft-research.cjs && node --check lib/craft-planner.cjs && node --check lib/crew.cjs && node --check lib/orchestrator.cjs && node --check lib/executors.cjs && node --check lib/store.cjs && node --check lib/studio-web.cjs && node --check lib/installers.cjs && node --check tests/studio.test.cjs && node --check tests/p1-hardening.test.cjs && node --check tests/p2-mcp-glama.test.cjs && node --check tests/p4-prompts-ai.test.cjs",
+    "check": "node --check index.cjs && node --check bin/ai-photo-studio.cjs && node --check bin/mcp-server.cjs && node --check lib/image-meta.cjs && node --check lib/preprocess.cjs && node --check lib/craft-library.cjs && node --check lib/craft-research.cjs && node --check lib/http-response.cjs && node --check lib/craft-planner.cjs && node --check lib/crew.cjs && node --check lib/orchestrator.cjs && node --check lib/executors.cjs && node --check lib/store.cjs && node --check lib/studio-web.cjs && node --check lib/installers.cjs && node --check tests/studio.test.cjs && node --check tests/p1-hardening.test.cjs && node --check tests/p2-mcp-glama.test.cjs && node --check tests/p4-prompts-ai.test.cjs",
     "test": "node --test tests/studio.test.cjs tests/p1-hardening.test.cjs tests/p2-mcp-glama.test.cjs tests/p4-prompts-ai.test.cjs",
     "test:coverage": "node --test --experimental-test-coverage tests/studio.test.cjs tests/p1-hardening.test.cjs tests/p2-mcp-glama.test.cjs tests/p4-prompts-ai.test.cjs"
   },

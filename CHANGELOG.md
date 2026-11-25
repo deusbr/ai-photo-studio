@@ -10,13 +10,13 @@ All notable changes to `ai-photo-studio` are documented in this file.
 - **State, Essay & CLI Fixes (`lib/orchestrator.cjs`, `lib/store.cjs`, `bin/ai-photo-studio.cjs`):** Added allowlisted `mergeCraftOptions` with explicit `null`/empty reset semantics, preserved locks/preset/craft/research across `applyVisionAnalysis`, connected `activeRenderVersion` rollback to `submitQa`, compiled all 5 engines per Essay frame, upgraded Web UI to 8-Point QA (`framingScore`), multi-effect checkboxes, toast feedback, and strict CLI option/port validation with pre-pipeline `--analyze`.
 
 ### MCP Next-Gen & Glama Packaging (P2)
-- **Protocol & Transport (`bin/mcp-server.cjs`):** Added `protocolVersion` negotiation (`2025-06-18`, `2025-03-26`, `2024-11-05`), `ping`, JSON-RPC `-32700` parse errors, unbounded multi-chunk `Content-Length` parsing, and opt-in `MCP_RESPONSE_FRAMING=content-length`.
+- **Protocol & Transport (`bin/mcp-server.cjs`):** Added `protocolVersion` negotiation (`2025-06-18`, `2025-03-26`, `2024-11-05`), `ping`, JSON-RPC `-32700` parse errors, multi-chunk `Content-Length` parsing with a 16 KiB header limit and a 64 MiB declared body limit, and opt-in `MCP_RESPONSE_FRAMING=content-length`.
 - **Multimodal & Sampling:** Added `ToolAnnotations` across all 18 tools, `structuredContent` responses, bounded `type: "image"` content blocks (`includeImage`), bidirectional `sampling/createMessage` for subscription-first vision analysis, `researchQuery` resolution in `studio_run_essay`, and safe `studio_start_web` port restart (without exposing `sessionToken`).
 - **Docker / Glama Readiness:** Added hardened non-root `node:24-alpine` `Dockerfile` and `.dockerignore`.
 
 ### Prompt Compiler v5, ComfyUI & Ollama (P4)
 - **Prompt Compiler v5 (`lib/crew.cjs`):** Added separated `positivePrompt`/`negativePrompt`, affirmative `fluxPrompt`, native `midjourneyPrompt` (`--style raw --no`), deduplicated guards, sanitized `researchHighlights` injection, and importable `comfyWorkflow` JSON graph generation.
-- **Resilient Executors & Local Vision (`lib/executors.cjs`, `lib/craft-research.cjs`):** Added `AbortController` timeouts, safe JSON/Markdown extraction, real ComfyUI `/upload/image` + `/prompt` + `/history` + `/view` execution (including clean queued-job handling in MCP & Web), local `OLLAMA_URL` vision provider, and collision-free atomic research cache writes for Windows.
+- **Resilient Executors & Local Vision (`lib/executors.cjs`, `lib/craft-research.cjs`):** Added HTTP deadlines through response consumption, streaming byte limits, an overall ComfyUI deadline and a confirmed unique anchor upload for each execution. Includes safe JSON/Markdown extraction, real ComfyUI `/upload/image` + `/prompt` + `/history` + `/view` execution (including clean queued-job handling in MCP & Web), local `OLLAMA_URL` vision provider, and unique staging files for the research cache. The Windows copy fallback does not guarantee atomic replacement.
 
 ## [4.0.0] - 2026-11-23
 
