@@ -825,6 +825,15 @@ async function handleToolCall(name, args = {}, context = {}) {
         provider: args.provider || 'gemini',
         model: args.model || ''
       });
+      if (rendered && rendered.queued && !Buffer.isBuffer(rendered.buffer)) {
+        return {
+          job,
+          engine: rendered.engine,
+          queued: true,
+          promptId: rendered.promptId || null,
+          workflow: rendered.workflow || null
+        };
+      }
       const updated = store.registerRenderFromBuffer(job.id, rendered);
       return { job: updated, engine: rendered.engine };
     }
@@ -866,7 +875,7 @@ async function handleToolCall(name, args = {}, context = {}) {
         webInstance = createStudioWebServer({ store, port: requestedPort !== null ? requestedPort : 4321 });
         webInfo = await webInstance.listen();
       }
-      return { ok: true, ...webInfo };
+      return { ok: true, port: webInfo.port, url: webInfo.url };
     }
     case 'studio_research_craft':
       return researchPhotographyTechniques({

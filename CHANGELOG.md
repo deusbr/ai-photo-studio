@@ -2,6 +2,22 @@
 
 All notable changes to `ai-photo-studio` are documented in this file.
 
+## [Unreleased — Trilha Rápida P1+P2+P4] - 2026-11-25
+
+### Security & Hardening (P1)
+- **Local Web Studio (`lib/studio-web.cjs`):** Added loopback `Host` validation (anti-DNS rebinding), `Origin`/`Sec-Fetch-Site` enforcement, strict `application/json` media-type checks (`415`), per-session constant-time `X-Studio-Token` CSRF defense (with `AI_PHOTO_STUDIO_REQUIRE_TOKEN` strict mode), rotating per-response CSP nonces on HTML, and default-deny CSP + security headers on API/assets.
+- **Structural Image Validation (`lib/image-meta.cjs`, `lib/store.cjs`):** Removed insecure extension-only fallback; enforced structural header verification for PNG (`IHDR`), JPEG (SOF markers), and WebP (`VP8`/`VP8L`/`VP8X`), canonical on-disk asset extensions derived from parsed bytes, and real binary MIME serving.
+- **State, Essay & CLI Fixes (`lib/orchestrator.cjs`, `lib/store.cjs`, `bin/ai-photo-studio.cjs`):** Added allowlisted `mergeCraftOptions` with explicit `null`/empty reset semantics, preserved locks/preset/craft/research across `applyVisionAnalysis`, connected `activeRenderVersion` rollback to `submitQa`, compiled all 5 engines per Essay frame, upgraded Web UI to 8-Point QA (`framingScore`), multi-effect checkboxes, toast feedback, and strict CLI option/port validation with pre-pipeline `--analyze`.
+
+### MCP Next-Gen & Glama Packaging (P2)
+- **Protocol & Transport (`bin/mcp-server.cjs`):** Added `protocolVersion` negotiation (`2025-06-18`, `2025-03-26`, `2024-11-05`), `ping`, JSON-RPC `-32700` parse errors, unbounded multi-chunk `Content-Length` parsing, and opt-in `MCP_RESPONSE_FRAMING=content-length`.
+- **Multimodal & Sampling:** Added `ToolAnnotations` across all 18 tools, `structuredContent` responses, bounded `type: "image"` content blocks (`includeImage`), bidirectional `sampling/createMessage` for subscription-first vision analysis, `researchQuery` resolution in `studio_run_essay`, and safe `studio_start_web` port restart (without exposing `sessionToken`).
+- **Docker / Glama Readiness:** Added hardened non-root `node:24-alpine` `Dockerfile` and `.dockerignore`.
+
+### Prompt Compiler v5, ComfyUI & Ollama (P4)
+- **Prompt Compiler v5 (`lib/crew.cjs`):** Added separated `positivePrompt`/`negativePrompt`, affirmative `fluxPrompt`, native `midjourneyPrompt` (`--style raw --no`), deduplicated guards, sanitized `researchHighlights` injection, and importable `comfyWorkflow` JSON graph generation.
+- **Resilient Executors & Local Vision (`lib/executors.cjs`, `lib/craft-research.cjs`):** Added `AbortController` timeouts, safe JSON/Markdown extraction, real ComfyUI `/upload/image` + `/prompt` + `/history` + `/view` execution (including clean queued-job handling in MCP & Web), local `OLLAMA_URL` vision provider, and collision-free atomic research cache writes for Windows.
+
 ## [4.0.0] - 2026-11-23
 
 ### Added
